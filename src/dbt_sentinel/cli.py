@@ -12,6 +12,29 @@ from .lineage import Lineage, ManifestError
 from .report import build_assessments, render_markdown, render_mermaid
 
 
+def _run_agent(assessments: list, lineage: Lineage, policy_dir: str | None) -> str:
+    """Run the reviewer agent and render its findings.
+
+    The lineage is passed in rather than reached for globally: the agent's tools answer
+    lookups against the same graph the deterministic report was built from, and a second
+    load could silently disagree with it.
+    """
+    from .agent import ReviewerAgent
+    from .report import render_agent_findings
+    from .retrieval import PolicyPack
+
+    pack = None
+    try:
+        pack = PolicyPack.load(policy_dir)
+        pack.load_cache()
+    except (FileNotFoundError, ValueError):
+        pass  # the agent still works without policy retrieval, just with less to cite
+
+    # ReviewerAgent.review never raises; every failure path returns a degraded result
+    # that the renderer states plainly.
+    return render_agent_findings(ReviewerAgent(lineage, pack).review(assessments))
+
+
 def _explain_retrieval(changes: list, policy_dir: str | None) -> str:
     """Render what retrieval did and why, including what it eliminated.
 
@@ -74,6 +97,14 @@ def main(argv: list[str] | None = None) -> int:
         "--policies",
         help="path to the policy pack directory (default: ./policies)",
     )
+    parser.add_argument(
+        "--agent",
+        action="store_true",
+        help=(
+            "run the reviewer agent for judgment findings. Requires ANTHROPIC_API_KEY. "
+            "Falls back to deterministic-only output, with a note, on any failure."
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -113,6 +144,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"\n<!-- {a.changed.node.name} -->\n```mermaid")
             print(render_mermaid(a))
             print("```")
+
+    if args.agent:
+        print()
+        print(_run_agent(assessments, lineage, args.policies))
 
     if args.explain:
         print(_explain_retrieval(changes, args.policies))

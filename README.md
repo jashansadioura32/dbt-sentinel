@@ -3,7 +3,9 @@
 An AI agent that reviews dbt pull requests: maps the diff to changed models, computes
 the downstream blast radius, and flags changes that will break something.
 
-**Status: day 2 of a 2-week public build.** The deterministic core works. No LLM yet.
+**Status: day 5 of a 2-week public build.** Deterministic core, policy retrieval and
+agent v0 work. Measured baselines are published in [evals/BASELINE.md](evals/BASELINE.md);
+they are honest rather than flattering.
 
 ## Non-goals
 
@@ -17,11 +19,15 @@ the downstream blast radius, and flags changes that will break something.
 ```bash
 git clone https://github.com/<you>/dbt-sentinel.git
 cd dbt-sentinel
-pip install -e .
+pip install -e .            # core + policy retrieval
+pip install -e ".[dev]"     # adds pytest
+pip install -e ".[agent]"   # adds the reviewer agent (anthropic, pydantic)
+pip install -e ".[server]"  # adds the webhook receiver (fastapi, uvicorn)
 ```
 
-The deterministic core has no third-party dependencies. `pip install -e ".[dev]"` adds
-pytest; the `agent` and `server` extras arrive on days 4-5.
+Only `pyyaml` is a runtime dependency: the policy pack is YAML, and retrieval is part of
+the deterministic path. Retrieval itself is stdlib-only, so the published eval numbers
+reproduce offline with no API key.
 
 ## What works today
 
@@ -29,17 +35,46 @@ pytest; the `agent` and `server` extras arrive on days 4-5.
 python -m dbt_sentinel \
   --manifest target/manifest.json \
   --diff pr.diff \
-  --mermaid --fail-on high
+  --mermaid --explain --fail-on high
 ```
 
 Without an editable install, prefix with `PYTHONPATH=src`.
 
+**Deterministic core (day 2)**
 - Parses `manifest.json` (schema v7–v14) into a normalised node graph
-- Resolves changed files to nodes via both `original_file_path` and `patch_path`
+- Resolves changed files to nodes via both `original_file_path` and `patch_path`,
+  normalising separators so a Windows-compiled manifest still matches a git diff
 - Extracts added/removed columns, scoped to the correct model inside a shared schema.yml
 - Walks the DAG for blast radius, excluding test nodes and following exposures
 - Scores severity and renders Markdown + a Mermaid diagram
 - Exits non-zero at a severity threshold, so it works as a CI gate
+
+**Policy retrieval (day 4)** — `--explain`
+- 14 governance rules in [policies/](policies/), hybrid retrieval: a deterministic
+  prefilter on `applies_to`, then TF-IDF ranking of what survives
+- Only the rule pack is vectorised — never the manifest, graph or SQL
+- `--explain` shows what was retrieved, the score, and how many rules the prefilter
+  eliminated
+
+**Reviewer agent (day 5)** — `--agent`
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+python -m dbt_sentinel --manifest target/manifest.json --diff pr.diff --agent
+```
+- Claude with tool-calling: `get_lineage`, `get_policies`, `get_columns`. Lookups are
+  tools, so the manifest is never pasted into a prompt
+- Returns schema-validated `Finding` objects; **the LLM never writes the comment**
+- Any failure — no key, timeout, rate limit, invalid schema twice, prose instead of a
+  tool call — degrades to deterministic-only with a visible note
+
+**Webhook skeleton (day 5, not yet wired)** — `dbt_sentinel/webhook.py`
+```bash
+export GITHUB_WEBHOOK_SECRET=...
+uvicorn dbt_sentinel.webhook:app --port 8000
+```
+Verifies `X-Hub-Signature-256` against the raw body in constant time, then logs the
+payload. It does not fetch diffs or post comments yet — day 8 wires that, and says so in
+its own response rather than returning a silent 200.
 
 ## Layout
 

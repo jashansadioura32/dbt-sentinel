@@ -128,6 +128,55 @@ def render_markdown(assessments: list[Assessment], unresolved: list) -> str:
     return "\n".join(lines)
 
 
+def _flatten(text: str, limit: int = 600) -> str:
+    """Collapse model-supplied text to a single line before it enters Markdown.
+
+    The LLM's strings are data, not markup. A newline followed by `##` or `-` would
+    create block structure the template did not author, letting the model forge headings
+    and bullets inside someone's PR comment.
+    """
+    collapsed = " ".join(str(text).split())
+    return collapsed[:limit].rstrip() + ("…" if len(collapsed) > limit else "")
+
+
+def render_agent_findings(result) -> str:
+    """Render `AgentResult` deterministically. The LLM never writes this comment.
+
+    Takes the result rather than the findings list so degradation can never be silent:
+    if the agent failed, that is stated here with its reason, because a reader who
+    cannot tell the agent ran will assume it did.
+    """
+    icons = {"high": "🔴", "medium": "🟠", "low": "🟢"}
+    lines = ["## Reviewer findings", ""]
+
+    if getattr(result, "degraded", False):
+        reason = _flatten(result.degradation_reason or "unknown error", limit=300)
+        lines += [
+            f"> ⚠️ **Agent unavailable — deterministic analysis only.** {reason}",
+            "",
+            "The blast radius above is unaffected: it is computed by graph traversal and "
+            "does not depend on the model.",
+            "",
+        ]
+        return "\n".join(lines)
+
+    if not result.findings:
+        lines += ["No policy or correctness findings. Structural analysis above stands.", ""]
+        return "\n".join(lines)
+
+    for finding in result.findings:
+        icon = icons.get(finding.severity, "⚪")
+        lines.append(
+            f"### {icon} `{finding.model}` — {finding.severity.upper()} "
+            f"· `{finding.rule_id}`"
+        )
+        lines.append(f"- {_flatten(finding.explanation)}")
+        lines.append(f"- **Fix:** {_flatten(finding.suggested_fix)}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def render_mermaid(assessment: Assessment) -> str:
     """Mermaid flowchart of one change's blast radius. Truncates wide graphs —
     a 200-node diagram communicates nothing."""

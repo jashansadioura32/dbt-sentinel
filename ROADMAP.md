@@ -56,6 +56,20 @@ tuning a retriever against the same 30 fixtures it is scored on is overfitting.
   is detectable structurally; the query builder should synthesise vocabulary from the
   change type rather than relying on diff text.
 
+## Day-5 caveat that day 6 must respect
+
+**The agent has never made a real API call.** Every day-5 test injects a fake client, so
+what is proven is the plumbing — schema validation, the retry, the degradation paths, the
+tool dispatch — and not the model's behaviour. Today's 31 passing tests are not evidence
+that review quality is any good, and they were never meant to be.
+
+Day 6 is the first time real findings exist. Two consequences:
+
+- Budget for the first live run disagreeing with the fake-client shape (tool-call
+  sequencing, `submit_findings` arriving alongside other tool calls in one response).
+- `DEFAULT_MODEL` is pinned to an exact id rather than an alias, so the day-6 numbers
+  stay attributable to one model. Changing it invalidates the comparison.
+
 ## Considered and rejected for v1
 
 - Web UI / dashboard — a non-goal, not a deferral.
