@@ -1,0 +1,16 @@
+diff --git a/models/staging/sources.yml b/models/staging/sources.yml
+index 1111111..2222222 100644
+--- a/models/staging/sources.yml
++++ b/models/staging/sources.yml
+@@ -16,7 +16,5 @@
+       - name: raw_orders
+         description: One row per order, as delivered upstream.
+         columns:
+           - name: id
+             description: Primary key.
+             tests:
+               - not_null
+-          - name: user_id
+-            description: Foreign key to the customer.
+           - name: order_date
+           - name: status

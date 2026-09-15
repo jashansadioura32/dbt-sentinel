@@ -1,0 +1,16 @@
+diff --git a/models/staging/stg_payments.sql b/models/staging/stg_payments.sql
+index 1111111..2222222 100644
+--- a/models/staging/stg_payments.sql
++++ b/models/staging/stg_payments.sql
+@@ -13,8 +13,8 @@
+     select
+         id as payment_id,
+         order_id,
+         payment_method,
+-
+-        -- `amount` is currently stored in cents, so we convert it to dollars
+-        amount / 100 as amount
++        -- `amount` is stored in cents upstream; convert to dollars
++        amount / 100 as amount
+
+     from source

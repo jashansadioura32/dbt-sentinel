@@ -1,0 +1,9 @@
+diff --git a/models/marts/fct_order_payments.sql b/models/marts/fct_order_payments.sql
+index 1111111..2222222 100644
+--- a/models/marts/fct_order_payments.sql
++++ b/models/marts/fct_order_payments.sql
+@@ -28,5 +28,5 @@
+ from {{ ref('stg_orders') }} as o
+-left join payments as p
++inner join payments as p
+     on o.order_id = p.order_id

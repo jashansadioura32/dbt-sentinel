@@ -1,0 +1,11 @@
+diff --git a/models/marts/fct_order_payments.sql b/models/marts/fct_order_payments.sql
+index 1111111..2222222 100644
+--- a/models/marts/fct_order_payments.sql
++++ b/models/marts/fct_order_payments.sql
+@@ -22,5 +22,5 @@
+ select
+     o.order_id,
+     o.customer_id,
+     o.order_date,
+-    coalesce(p.total_amount, 0) as total_amount
++    coalesce(p.total_amount, 0) * 1.1 as total_amount

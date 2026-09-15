@@ -1,0 +1,357 @@
+# Ground-truth labels for the 30 eval fixtures.
+#
+# READ THIS BEFORE CHANGING A LABEL.
+#
+# Every `rationale` below was written from dbt semantics — what the change actually does
+# to consumers of the model — BEFORE the eval runner existed and without consulting what
+# dbt-sentinel outputs. That ordering is deliberate and is the only thing that makes these
+# numbers worth publishing. If you relabel a fixture to make a metric look better, the
+# suite becomes a mirror and the published precision/recall means nothing.
+#
+# The legitimate reason to change a label: the tool was right and the label was wrong on
+# dbt semantics. When that happens, change it and log it in evals/LABEL_CHANGES.md with
+# the reasoning (day 6).
+#
+# Severity vocabulary — matches report.assess:
+#   high   : will break a downstream consumer, or silently corrupt data, on merge
+#   medium : risky and warrants review, but no consumer breaks immediately
+#   low    : no structural change, or no consumer can observe it
+#
+# `expected_rule_ids` are policy-pack rule ids (day 4). They are written here now so the
+# day-4 retrieval work has a target it did not author. Empty list = no governance rule
+# should fire, only structural scoring.
+#
+# Blast-radius facts referenced below, from the pinned manifest (evals/manifest/manifest.json):
+#   stg_orders           -> 7 downstream: customers, fct_order_payments, orders,
+#                           + exposures customer_success_churn, finance_month_end, exec_dashboard,
+#                           + public rpt_customer_revenue, contracted fct_order_payments
+#   stg_payments         -> 7 downstream (same surface as stg_orders)
+#   stg_customers        -> 2 downstream: customers, exposure customer_success_churn
+#   fct_order_payments   -> 3 downstream: rpt_customer_revenue (public),
+#                           exposures finance_month_end, exec_dashboard. incremental + contracted.
+#   rpt_customer_revenue -> 1 downstream: exposure exec_dashboard. access=public.
+#   orders, stg_raw_events -> 0 downstream (leaves)
+
+fixtures:
+
+  # ─────────────────────────── BREAKING (10) ───────────────────────────
+  # Each of these breaks a consumer, corrupts data, or violates a declared contract
+  # on merge. A reviewer who missed any of them would be doing a bad review.
+
+  - id: b01_column_rename_with_consumers
+    category: breaking
+    expected_severity: high
+    expected_rule_ids: [contract-breaking-change]
+    rationale: >
+      stg_orders.customer_id is renamed to cust_id. dbt does not rewrite downstream
+      references, so every model selecting customer_id from stg_orders fails to compile
+      on the next run. customers and orders both select it, and the failure propagates to
+      three exposures including exec_dashboard. A rename is the canonical breaking change:
+      the column does not become NULL, the build stops.
+
+  - id: b02_model_deletion_with_consumers
+    category: breaking
+    expected_severity: high
+    expected_rule_ids: [contract-breaking-change]
+    rationale: >
+      stg_payments is deleted while orders, customers and fct_order_payments still
+      ref() it. dbt fails at parse time with a compilation error on the missing node —
+      the whole project stops building, not just the deleted model's descendants.
+
+  - id: b03_contract_column_dropped
+    category: breaking
+    expected_severity: high
+    expected_rule_ids: [contract-enforcement, contract-breaking-change]
+    rationale: >
+      customer_id is removed from fct_order_payments' enforced contract. With
+      contract.enforced=true, dbt validates the model's output against the declared
+      columns and errors if they disagree, so this fails on build. Independently,
+      rpt_customer_revenue selects customer_id from this model, and a contract is a
+      published promise to consumers — breaking it is the exact thing contracts exist
+      to prevent.
+
+  - id: b04_dropped_dedup
+    category: breaking
+    expected_severity: high
+    expected_rule_ids: [grain-integrity]
+    rationale: >
+      The distinct guaranteeing one row per customer_id is removed from stg_customers.
+      Nothing fails to compile — this is worse than a compile error. The unique test on
+      customer_id starts failing, and any downstream join against stg_customers fans out,
+      silently inflating every aggregate in customers and the churn exposure. Grain
+      changes are high severity precisely because they are invisible until the numbers
+      are wrong.
+
+  - id: b05_changed_join_grain
+    category: breaking
+    expected_severity: high
+    expected_rule_ids: [grain-integrity]
+    rationale: >
+      left join becomes inner join in fct_order_payments. Orders with no payment rows
+      silently disappear from a contracted, incremental mart feeding the month-end
+      finance close. Row count drops with no error raised. Because the model is
+      incremental, already-materialised rows are not deleted, so the table ends up in a
+      state that matches neither the old nor the new logic.
+
+  - id: b06_type_narrowing_on_contract
+    category: breaking
+    expected_severity: high
+    expected_rule_ids: [contract-enforcement, type-safety]
+    rationale: >
+      total_amount narrows from double to integer on an enforced contract. dbt's contract
+      check fails when the model's actual type disagrees with the declared one. Even if it
+      passed, narrowing truncates the fractional component of every payment total — a
+      silent data-quality regression in a financial mart.
+
+  - id: b07_removed_incremental_filter
+    category: breaking
+    expected_severity: high
+    expected_rule_ids: [incremental-safety]
+    rationale: >
+      The is_incremental() guard is deleted, so every incremental run reprocesses the
+      full source and appends it to the existing table. With unique_key set, dbt merges
+      rather than appends, so the visible symptom is a full-table rewrite on every run:
+      cost explodes and the run duration grows without bound. Removing the predicate,
+      not the materialization, is what makes this easy to miss in review.
+
+  - id: b08_model_renamed
+    category: breaking
+    expected_severity: high
+    expected_rule_ids: [contract-breaking-change]
+    rationale: >
+      stg_orders.sql is renamed to stg_order_items.sql. In dbt the filename is the model
+      name, so ref('stg_orders') in customers, orders and fct_order_payments now points at
+      a node that does not exist and the project fails to parse. A rename is a delete plus
+      an add as far as the DAG is concerned.
+
+  - id: b09_incremental_key_change
+    category: breaking
+    expected_severity: high
+    expected_rule_ids: [incremental-safety, grain-integrity]
+    rationale: >
+      unique_key moves from order_id to customer_id on an incremental model. dbt merges
+      on unique_key, so subsequent runs collapse every order for a customer into a single
+      row — the table's grain changes from one row per order to one row per customer
+      without any schema change to signal it. Existing rows are not rebuilt, so the table
+      holds both grains at once until a full refresh.
+
+  - id: b10_source_column_dropped
+    category: breaking
+    expected_severity: high
+    expected_rule_ids: [source-freshness, contract-breaking-change]
+    rationale: >
+      user_id is removed from the ecom.raw_orders source definition. stg_raw_events
+      selects it, so the declaration no longer matches what the model reads. Removing a
+      column from a source declaration is how a team signals an upstream schema change;
+      the consumer must be updated in the same PR or it breaks on the next run.
+
+  # ─────────────────────────── SHOULD-PASS (10) ───────────────────────────
+  # These are the fixtures that decide whether the tool is usable. Any HIGH here is a
+  # false positive, and an agent that flags routine PRs gets muted inside a week — so
+  # the FPR on this block is reported separately from overall accuracy.
+
+  - id: p01_comment_added
+    category: should_pass
+    expected_severity: low
+    expected_rule_ids: []
+    rationale: >
+      Two SQL comments added to stg_orders. The compiled SQL is semantically identical.
+      stg_orders has the widest blast radius in the project (7 nodes, 3 exposures), which
+      is exactly why this fixture exists: reach must not create severity. If proximity to
+      an exposure were enough, this PR would score HIGH and the tool would be useless.
+
+  - id: p02_whitespace_only
+    category: should_pass
+    expected_severity: low
+    expected_rule_ids: []
+    rationale: >
+      Trailing whitespace change on one line of stg_customers. No token in the compiled
+      SQL changes. Nothing downstream can observe this.
+
+  - id: p03_test_added
+    category: should_pass
+    expected_severity: low
+    expected_rule_ids: []
+    rationale: >
+      A not_null test is added to stg_payments.order_id. Tests are assertions about data,
+      not transformations of it — no model output changes and no consumer is affected.
+      Adding coverage is the behaviour a governance tool should encourage, so flagging it
+      would actively discourage good practice.
+
+  - id: p04_new_unused_model
+    category: should_pass
+    expected_severity: low
+    expected_rule_ids: []
+    rationale: >
+      A new staging model is added with nothing ref()ing it. Zero downstream nodes means
+      zero blast radius. New additive nodes cannot break existing consumers.
+
+  - id: p05_docs_edit
+    category: should_pass
+    expected_severity: low
+    expected_rule_ids: []
+    rationale: >
+      A model description is rewritten in models/schema.yml. Descriptions are metadata;
+      they do not participate in compilation and no column or test is touched. Note this
+      edits a shared schema.yml documenting both customers and orders — the tool must not
+      flag orders, which is merely adjacent in the same file.
+
+  - id: p06_reformatted_sql
+    category: should_pass
+    expected_severity: low
+    expected_rule_ids: []
+    rationale: >
+      A comment is reworded and a blank line removed in stg_payments. The amount / 100
+      expression and every column alias are unchanged, so the compiled SQL is equivalent.
+
+  - id: p07_config_change
+    category: should_pass
+    expected_severity: low
+    expected_rule_ids: []
+    rationale: >
+      persist_docs is enabled project-wide in dbt_project.yml. This changes whether
+      descriptions are written to the warehouse as COMMENTs; it does not alter any
+      model's columns, grain, or materialization. No consumer's query changes.
+
+  - id: p08_tag_added
+    category: should_pass
+    expected_severity: low
+    expected_rule_ids: []
+    rationale: >
+      A reporting tag is added to rpt_customer_revenue's config. Tags are selectors for
+      dbt commands. The model's SQL, columns and access level are untouched, so nothing
+      downstream is affected — even though this model feeds exec_dashboard directly.
+
+  - id: p09_new_seed
+    category: should_pass
+    expected_severity: low
+    expected_rule_ids: []
+    rationale: >
+      A new seed CSV is added with no model reading it. Additive, zero consumers, zero
+      blast radius.
+
+  - id: p10_additive_column
+    category: should_pass
+    expected_severity: low
+    expected_rule_ids: []
+    rationale: >
+      loaded_at is added to stg_orders. Existing columns are untouched, so every
+      downstream select keeps working — SQL is tolerant of extra columns it does not
+      reference. This is the additive half of the rename in b01 and the pair is the
+      sharpest test in the suite: same file, same high-reach model, opposite verdicts.
+      A tool that scores both the same is reacting to reach, not to the change.
+
+  # ─────────────────────────── SUBTLE (10) ───────────────────────────
+  # Judgment calls. These are where a deterministic rule engine should be honest about
+  # its limits and where the day-5 agent has to earn its cost. Most are MEDIUM: real
+  # risk, no immediate breakage.
+
+  - id: s01_pii_column_untagged
+    category: subtle
+    expected_severity: medium
+    expected_rule_ids: [pii-tagging]
+    rationale: >
+      email_address is added to stg_customers with no meta tag, no masking policy and no
+      description marking it as PII. Nothing breaks — this is a governance failure, not a
+      technical one. The sibling columns first_name and last_name are documented as PII in
+      models/schema.yml, so the project's own convention is being violated. MEDIUM not
+      HIGH: it needs fixing before merge, but no consumer breaks and no data is corrupted.
+
+  - id: s02_incremental_no_full_refresh
+    category: subtle
+    expected_severity: medium
+    expected_rule_ids: [incremental-safety]
+    rationale: >
+      total_amount gains a 1.1 multiplier in an incremental model. New rows get the new
+      calculation; rows already in the table keep the old one. The result is a column
+      where the arithmetic depends on when the row was built — internally inconsistent
+      data that no test catches. The fix is a full refresh, which the PR does not mention.
+      MEDIUM rather than HIGH because the change itself may be intended and correct; the
+      omission of the refresh is the defect.
+
+  - id: s03_contract_widened_safely
+    category: subtle
+    expected_severity: low
+    expected_rule_ids: [contract-enforcement]
+    rationale: >
+      order_id widens from integer to bigint on an enforced contract. Widening is the
+      safe direction: every existing integer value fits, no consumer reading the column
+      breaks, and no data is truncated. This is the deliberate contrast with b06 — the
+      same field, the same contract, the opposite direction, and it must not score the
+      same. A tool that flags any contract edit is not reading the semantics.
+
+  - id: s04_exposure_owner_change
+    category: subtle
+    expected_severity: low
+    expected_rule_ids: [exposure-ownership]
+    rationale: >
+      exec_dashboard's owner changes from Analytics Team to Data Platform. No model, no
+      column, no SQL is touched — only review-routing metadata. Worth noting in a comment
+      because it changes who gets paged when this dashboard breaks, but it is not a risk
+      to the data.
+
+  - id: s05_public_access_added
+    category: subtle
+    expected_severity: medium
+    expected_rule_ids: [public-access-review, model-grouping]
+    rationale: >
+      rpt_customer_revenue is assigned to a group while already public. Public access
+      means other dbt projects may ref() this model, so its columns become a published
+      interface and future changes to them are breaking changes for consumers this repo
+      cannot see. Governance review is warranted whenever the public surface shifts.
+      MEDIUM: nothing breaks today, but it widens what cannot be changed tomorrow.
+
+  - id: s06_column_reordered
+    category: subtle
+    expected_severity: low
+    expected_rule_ids: []
+    rationale: >
+      first_name and last_name swap positions in stg_customers' select list. Downstream
+      models reference columns by name, not ordinal, so this is a no-op. It is in the
+      subtle block because a naive differ sees two removed and two added columns and
+      concludes two columns were dropped — the column SET is unchanged, which is what
+      matters.
+
+  - id: s07_test_removed
+    category: subtle
+    expected_severity: medium
+    expected_rule_ids: [test-coverage-keys]
+    rationale: >
+      The not_null test is removed from stg_orders.order_id, the model's primary key.
+      Nothing breaks and no output changes — the project's ability to detect future
+      breakage is what degrades. order_id is the join key for the whole order pipeline, so
+      losing the assertion on a model with 7 downstream nodes removes a genuine safety
+      net. MEDIUM: removing coverage on a key column needs a stated reason.
+
+  - id: s08_materialization_changed
+    category: subtle
+    expected_severity: medium
+    expected_rule_ids: [staging-layer-purity, materialization-review]
+    rationale: >
+      stg_orders changes from view to table. Query results are identical, so no consumer
+      breaks. The behaviour changes: the model now holds a point-in-time snapshot and
+      goes stale between runs, where a view was always live. Staging models are
+      conventionally views for exactly this reason. MEDIUM because it alters freshness
+      semantics for 7 downstream nodes without changing any column.
+
+  - id: s09_cross_schema_ref
+    category: subtle
+    expected_severity: medium
+    expected_rule_ids: [naming-convention, public-access-review]
+    rationale: >
+      rpt_customer_revenue moves to a reporting schema. dbt rewrites ref() to the new
+      location, so in-project consumers keep working. Anything outside dbt — the BI tool
+      behind exec_dashboard, ad-hoc queries, grants — points at the old fully-qualified
+      name and breaks. The blast radius extends past the DAG, which is precisely why
+      model-level lineage alone cannot settle this one.
+
+  - id: s10_alias_change
+    category: subtle
+    expected_severity: medium
+    expected_rule_ids: [naming-convention, contract-breaking-change]
+    rationale: >
+      An alias renames the relation fct_order_payments writes to in the warehouse. ref()
+      resolves through the alias so dbt-internal consumers are fine, but the physical
+      table name changes for every external consumer, and the finance_month_end exposure
+      reads this contracted mart. Same shape of risk as s09: invisible inside the DAG,
+      breaking outside it.

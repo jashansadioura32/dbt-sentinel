@@ -1,0 +1,12 @@
+diff --git a/dbt_project.yml b/dbt_project.yml
+index 1111111..2222222 100644
+--- a/dbt_project.yml
++++ b/dbt_project.yml
+@@ -20,6 +20,7 @@
+ models:
+   jaffle_shop:
+       materialized: table
++      +persist_docs:
++        relation: true
+       staging:
+         materialized: view

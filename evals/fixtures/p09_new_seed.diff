@@ -1,0 +1,10 @@
+diff --git a/seeds/raw_regions.csv b/seeds/raw_regions.csv
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/seeds/raw_regions.csv
+@@ -0,0 +1,4 @@
++region_id,region_name
++1,APAC
++2,EMEA
++3,AMER

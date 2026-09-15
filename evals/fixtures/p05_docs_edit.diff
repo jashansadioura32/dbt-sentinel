@@ -1,0 +1,10 @@
+diff --git a/models/schema.yml b/models/schema.yml
+index 1111111..2222222 100644
+--- a/models/schema.yml
++++ b/models/schema.yml
+@@ -4,4 +4,4 @@
+   - name: customers
+-    description: This table has basic information about a customer, as well as some derived facts based on a customer's orders
++    description: One row per customer, with derived order facts. Grain is customer_id.
+
+     columns:

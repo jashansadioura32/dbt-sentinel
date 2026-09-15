@@ -1,0 +1,12 @@
+diff --git a/models/staging/stg_customers.sql b/models/staging/stg_customers.sql
+index 1111111..2222222 100644
+--- a/models/staging/stg_customers.sql
++++ b/models/staging/stg_customers.sql
+@@ -13,6 +13,6 @@
+     select
+         id as customer_id,
+-        first_name,
++        first_name,
+         last_name
+
+     from source

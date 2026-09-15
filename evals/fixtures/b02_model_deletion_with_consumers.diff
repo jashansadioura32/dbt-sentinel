@@ -1,0 +1,25 @@
+diff --git a/models/staging/stg_payments.sql b/models/staging/stg_payments.sql
+deleted file mode 100644
+index 1111111..0000000
+--- a/models/staging/stg_payments.sql
++++ /dev/null
+@@ -1,25 +0,0 @@
+-with source as (
+-
+-    select * from {{ ref('raw_payments') }}
+-
+-),
+-
+-renamed as (
+-
+-    select
+-        id as payment_id,
+-        order_id,
+-        payment_method,
+-        amount / 100 as amount
+-
+-    from source
+-
+-)
+-
+-select * from renamed

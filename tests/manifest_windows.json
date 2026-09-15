@@ -1,0 +1,152 @@
+{
+  "metadata": {
+    "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
+    "dbt_version": "1.12.4",
+    "generated_at": "2026-09-15T10:56:32.493904Z",
+    "project_name": "jaffle_shop"
+  },
+  "nodes": {
+    "model.jaffle_shop.stg_orders": {
+      "name": "stg_orders",
+      "resource_type": "model",
+      "original_file_path": "models\\staging\\stg_orders.sql",
+      "patch_path": "jaffle_shop://models\\staging\\schema.yml",
+      "config": { "materialized": "view" },
+      "contract": { "enforced": false },
+      "access": "protected",
+      "depends_on": { "nodes": ["seed.jaffle_shop.raw_orders"] },
+      "columns": { "order_id": {}, "customer_id": {}, "order_date": {}, "status": {} }
+    },
+    "model.jaffle_shop.stg_customers": {
+      "name": "stg_customers",
+      "resource_type": "model",
+      "original_file_path": "models\\staging\\stg_customers.sql",
+      "patch_path": "jaffle_shop://models\\staging\\schema.yml",
+      "config": { "materialized": "view" },
+      "contract": { "enforced": false },
+      "access": "protected",
+      "depends_on": { "nodes": ["seed.jaffle_shop.raw_customers"] },
+      "columns": { "customer_id": {}, "first_name": {}, "last_name": {} }
+    },
+    "model.jaffle_shop.stg_payments": {
+      "name": "stg_payments",
+      "resource_type": "model",
+      "original_file_path": "models\\staging\\stg_payments.sql",
+      "patch_path": "jaffle_shop://models\\staging\\schema.yml",
+      "config": { "materialized": "view" },
+      "contract": { "enforced": false },
+      "access": "protected",
+      "depends_on": { "nodes": ["seed.jaffle_shop.raw_payments"] },
+      "columns": { "payment_id": {}, "order_id": {}, "amount": {} }
+    },
+    "model.jaffle_shop.orders": {
+      "name": "orders",
+      "resource_type": "model",
+      "original_file_path": "models\\orders.sql",
+      "patch_path": "jaffle_shop://models\\schema.yml",
+      "config": { "materialized": "table" },
+      "contract": { "enforced": false },
+      "access": "protected",
+      "depends_on": {
+        "nodes": ["model.jaffle_shop.stg_orders", "model.jaffle_shop.stg_payments"]
+      },
+      "columns": { "order_id": {}, "customer_id": {}, "amount": {} }
+    },
+    "model.jaffle_shop.customers": {
+      "name": "customers",
+      "resource_type": "model",
+      "original_file_path": "models\\customers.sql",
+      "patch_path": "jaffle_shop://models\\schema.yml",
+      "config": { "materialized": "table" },
+      "contract": { "enforced": false },
+      "access": "protected",
+      "depends_on": {
+        "nodes": [
+          "model.jaffle_shop.stg_orders",
+          "model.jaffle_shop.stg_customers",
+          "model.jaffle_shop.stg_payments"
+        ]
+      },
+      "columns": { "customer_id": {}, "first_name": {}, "last_name": {} }
+    },
+    "seed.jaffle_shop.raw_orders": {
+      "name": "raw_orders",
+      "resource_type": "seed",
+      "original_file_path": "seeds\\raw_orders.csv",
+      "patch_path": null,
+      "config": { "materialized": "seed" },
+      "contract": { "enforced": false },
+      "depends_on": { "nodes": [] },
+      "columns": {}
+    },
+    "seed.jaffle_shop.raw_customers": {
+      "name": "raw_customers",
+      "resource_type": "seed",
+      "original_file_path": "seeds\\raw_customers.csv",
+      "patch_path": null,
+      "config": { "materialized": "seed" },
+      "contract": { "enforced": false },
+      "depends_on": { "nodes": [] },
+      "columns": {}
+    },
+    "seed.jaffle_shop.raw_payments": {
+      "name": "raw_payments",
+      "resource_type": "seed",
+      "original_file_path": "seeds\\raw_payments.csv",
+      "patch_path": null,
+      "config": { "materialized": "seed" },
+      "contract": { "enforced": false },
+      "depends_on": { "nodes": [] },
+      "columns": {}
+    },
+    "test.jaffle_shop.not_null_stg_orders_order_id.abc123": {
+      "name": "not_null_stg_orders_order_id",
+      "resource_type": "test",
+      "original_file_path": "models\\staging\\schema.yml",
+      "config": { "materialized": "test" },
+      "depends_on": { "nodes": ["model.jaffle_shop.stg_orders"] },
+      "columns": {}
+    },
+    "test.jaffle_shop.unique_stg_orders_order_id.def456": {
+      "name": "unique_stg_orders_order_id",
+      "resource_type": "test",
+      "original_file_path": "models\\staging\\schema.yml",
+      "config": { "materialized": "test" },
+      "depends_on": { "nodes": ["model.jaffle_shop.stg_orders"] },
+      "columns": {}
+    },
+    "test.jaffle_shop.accepted_values_stg_orders_status.ghi789": {
+      "name": "accepted_values_stg_orders_status",
+      "resource_type": "test",
+      "original_file_path": "models\\staging\\schema.yml",
+      "config": { "materialized": "test" },
+      "depends_on": { "nodes": ["model.jaffle_shop.stg_orders"] },
+      "columns": {}
+    }
+  },
+  "sources": {},
+  "exposures": {},
+  "macros": {},
+  "child_map": {
+    "seed.jaffle_shop.raw_orders": ["model.jaffle_shop.stg_orders"],
+    "seed.jaffle_shop.raw_customers": ["model.jaffle_shop.stg_customers"],
+    "seed.jaffle_shop.raw_payments": ["model.jaffle_shop.stg_payments"],
+    "model.jaffle_shop.stg_orders": [
+      "model.jaffle_shop.customers",
+      "model.jaffle_shop.orders",
+      "test.jaffle_shop.not_null_stg_orders_order_id.abc123",
+      "test.jaffle_shop.unique_stg_orders_order_id.def456",
+      "test.jaffle_shop.accepted_values_stg_orders_status.ghi789"
+    ],
+    "model.jaffle_shop.stg_customers": ["model.jaffle_shop.customers"],
+    "model.jaffle_shop.stg_payments": [
+      "model.jaffle_shop.customers",
+      "model.jaffle_shop.orders"
+    ],
+    "model.jaffle_shop.orders": [],
+    "model.jaffle_shop.customers": [],
+    "test.jaffle_shop.not_null_stg_orders_order_id.abc123": [],
+    "test.jaffle_shop.unique_stg_orders_order_id.def456": [],
+    "test.jaffle_shop.accepted_values_stg_orders_status.ghi789": []
+  }
+}

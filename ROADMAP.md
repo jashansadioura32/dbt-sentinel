@@ -21,6 +21,22 @@ rather than merely deferred.
 - **`--since` git integration** so the tool computes its own diff from a base ref
   instead of being handed one.
 
+## Found by the day-3 eval baseline, deferred to day 7
+
+Both are measured and documented in `evals/BASELINE.md`. Day 6 measures, day 7 fixes the
+top two failure modes — these are the current candidates, and they are parked here rather
+than fixed on sight so the before/after comparison survives.
+
+- **YAML column attribution drops the node entirely.** `yaml_columns_by_model` only
+  tracks `- name:` under a `columns:` key, so a `data_type:` edit on a contracted model
+  or an `owner:` edit on an exposure resolves to nothing and the change is silently
+  dropped — no severity, no warning. 4 fixtures affected, 2 of them HIGH. This is the
+  worst failure shape available: a dropped contract column produces no output at all.
+- **`is_structural` counts added columns as structural.** An additive column scores the
+  same HIGH as a rename (`p10` vs `b01`, same model, same reach, opposite semantics), and
+  a new `- name:` under a `tests:` key is misread as a new column. Drives the 0.200
+  false-positive rate on the should-pass block.
+
 ## Considered and rejected for v1
 
 - Web UI / dashboard — a non-goal, not a deferral.

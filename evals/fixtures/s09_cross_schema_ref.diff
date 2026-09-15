@@ -1,0 +1,9 @@
+diff --git a/models/marts/rpt_customer_revenue.sql b/models/marts/rpt_customer_revenue.sql
+index 1111111..2222222 100644
+--- a/models/marts/rpt_customer_revenue.sql
++++ b/models/marts/rpt_customer_revenue.sql
+@@ -1,3 +1,3 @@
+-{{ config(materialized='table', access='public') }}
++{{ config(materialized='table', access='public', schema='reporting') }}
+
+ -- A public model downstream of the contracted mart.

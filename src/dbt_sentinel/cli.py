@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .diff import resolve_changes
@@ -22,6 +23,13 @@ def main(argv: list[str] | None = None) -> int:
         default="never",
         help="exit non-zero at or above this severity",
     )
+    parser.add_argument(
+        "--changed-at",
+        help=(
+            "ISO-8601 timestamp of the change under review (e.g. the PR head commit "
+            "date). If the manifest predates it, a staleness warning is emitted."
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -32,8 +40,27 @@ def main(argv: list[str] | None = None) -> int:
 
     diff_text = sys.stdin.read() if args.diff == "-" else Path(args.diff).read_text(encoding="utf-8")
 
+    changed_at = None
+    if args.changed_at:
+        try:
+            changed_at = datetime.fromisoformat(args.changed_at.replace("Z", "+00:00"))
+        except ValueError:
+            print(
+                f"error: --changed-at {args.changed_at!r} is not ISO-8601. "
+                f"Use e.g. 2026-09-15T10:00:00Z.",
+                file=sys.stderr,
+            )
+            return 2
+        if changed_at.tzinfo is None:
+            changed_at = changed_at.replace(tzinfo=timezone.utc)
+
     changes, unresolved = resolve_changes(diff_text, lineage)
     assessments = build_assessments(changes, lineage)
+
+    # Printed before the findings: a reader who sees a clean review needs to know the
+    # lineage behind it may be outdated before they trust it.
+    if staleness := lineage.staleness_warning(changed_at):
+        print(f"> ⚠️ **Stale manifest.** {staleness}\n")
 
     print(render_markdown(assessments, unresolved))
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from collections import deque
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .models import BlastRadius, Node, NodeKind
@@ -24,9 +25,15 @@ class ManifestError(ValueError):
 
 
 class Lineage:
-    def __init__(self, nodes: dict[str, Node], child_map: dict[str, list[str]]):
+    def __init__(
+        self,
+        nodes: dict[str, Node],
+        child_map: dict[str, list[str]],
+        generated_at: datetime | None = None,
+    ):
         self._nodes = nodes
         self._child_map = child_map
+        self.generated_at = generated_at
 
     # ---------- construction ----------
 
@@ -45,7 +52,32 @@ class Lineage:
         cls._check_version(manifest)
         nodes = cls._parse_nodes(manifest)
         child_map = cls._child_map(manifest, nodes)
-        return cls(nodes, child_map)
+        return cls(nodes, child_map, _parse_generated_at(manifest))
+
+    def staleness_warning(self, compared_to: datetime | None = None) -> str | None:
+        """Warn when the manifest predates the code being reviewed.
+
+        A stale manifest shrinks every blast radius: models added since the compile are
+        invisible, and reach is computed from an outdated graph. The tool still produces
+        a confident-looking review, which is the dangerous part — so say so explicitly
+        rather than letting the reader assume the lineage is current.
+        """
+        if self.generated_at is None:
+            return (
+                "Manifest has no `generated_at` timestamp, so its freshness cannot be "
+                "checked. Blast radius may be computed from a stale graph."
+            )
+        if compared_to is None:
+            return None
+        if self.generated_at >= compared_to:
+            return None
+        age = compared_to - self.generated_at
+        hours = age.total_seconds() / 3600
+        return (
+            f"Manifest was compiled {hours:.1f}h before the change under review "
+            f"({self.generated_at.isoformat()}). Models added since are invisible and "
+            f"blast radius is under-reported. Re-run `dbt compile` on the base branch."
+        )
 
     @staticmethod
     def _check_version(manifest: dict) -> None:
@@ -204,7 +236,35 @@ def _strip_package(patch_path: str | None) -> str | None:
     return patch_path.split("://", 1)[-1]
 
 
+def _parse_generated_at(manifest: dict) -> datetime | None:
+    """dbt writes `metadata.generated_at` as UTC ISO-8601, usually with a trailing Z."""
+    raw = (manifest.get("metadata") or {}).get("generated_at")
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    # Naive timestamps are UTC by dbt's convention; tag them so comparisons never raise.
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _posix(path: str | None) -> str | None:
+    """Normalise separators before any path comparison.
+
+    dbt writes `original_file_path` and `patch_path` using the separator of the OS that
+    ran `dbt compile`, so a manifest compiled on Windows carries `models\\staging\\x.sql`.
+    Git diffs always use forward slashes. Comparing the two raw means every file fails to
+    resolve on Windows and the tool reports nothing on a real PR — the worst failure mode
+    available, since it looks like a clean review.
+    """
+    if not path:
+        return None
+    return path.replace("\\", "/")
+
+
 def _path_matches(candidate: str, manifest_path: str | None) -> bool:
-    if not manifest_path:
+    normalised = _posix(manifest_path)
+    if not normalised:
         return False
-    return candidate.endswith(manifest_path) or manifest_path.endswith(candidate)
+    return candidate.endswith(normalised) or normalised.endswith(candidate)

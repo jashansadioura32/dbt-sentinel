@@ -1,0 +1,465 @@
+{
+  "summary": {
+    "n_fixtures": 30,
+    "n_scored": 26,
+    "n_errored": 4,
+    "errored_ids": [
+      "b03_contract_column_dropped",
+      "b06_type_narrowing_on_contract",
+      "s03_contract_widened_safely",
+      "s04_exposure_owner_change"
+    ],
+    "confusion": {
+      "tp": 8,
+      "fp": 2,
+      "fn": 7,
+      "tn": 9
+    },
+    "precision": 0.8,
+    "recall": 0.533,
+    "f1": 0.64,
+    "false_positive_rate_should_pass": 0.2,
+    "exact_severity_match": 14,
+    "exact_severity_match_rate": 0.538,
+    "by_category": {
+      "breaking": {
+        "n": 10,
+        "errored": 2,
+        "exact_match": 3,
+        "exact_match_rate": 0.375
+      },
+      "should_pass": {
+        "n": 10,
+        "errored": 0,
+        "exact_match": 8,
+        "exact_match_rate": 0.8
+      },
+      "subtle": {
+        "n": 10,
+        "errored": 2,
+        "exact_match": 3,
+        "exact_match_rate": 0.375
+      }
+    }
+  },
+  "outcomes": [
+    {
+      "id": "b01_column_rename_with_consumers",
+      "category": "breaking",
+      "expected": "high",
+      "actual": "high",
+      "errored": false,
+      "resolved": [
+        "stg_orders"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Removed column(s) `customer_id` with 7 downstream node(s)",
+        "Reaches 1 contracted model(s): fct_order_payments",
+        "Reaches 3 exposure(s): customer_success_churn, finance_month_end, exec_dashboard (owners: Analytics Team, Data Science, Finance Data)"
+      ]
+    },
+    {
+      "id": "b02_model_deletion_with_consumers",
+      "category": "breaking",
+      "expected": "high",
+      "actual": "high",
+      "errored": false,
+      "resolved": [
+        "stg_payments"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Removed column(s) `amount, payment_id` with 7 downstream node(s)",
+        "Model deleted while 7 node(s) still depend on it",
+        "Reaches 1 contracted model(s): fct_order_payments",
+        "Reaches 3 exposure(s): customer_success_churn, finance_month_end, exec_dashboard (owners: Analytics Team, Data Science, Finance Data)"
+      ]
+    },
+    {
+      "id": "b03_contract_column_dropped",
+      "category": "breaking",
+      "expected": "high",
+      "actual": null,
+      "errored": true,
+      "resolved": [],
+      "unresolved": [],
+      "reasons": []
+    },
+    {
+      "id": "b04_dropped_dedup",
+      "category": "breaking",
+      "expected": "high",
+      "actual": "low",
+      "errored": false,
+      "resolved": [
+        "stg_customers"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 1 exposure(s): customer_success_churn (owners: Data Science)"
+      ]
+    },
+    {
+      "id": "b05_changed_join_grain",
+      "category": "breaking",
+      "expected": "high",
+      "actual": "medium",
+      "errored": false,
+      "resolved": [
+        "fct_order_payments"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 2 exposure(s): finance_month_end, exec_dashboard (owners: Analytics Team, Finance Data)",
+        "Reaches 1 model(s) with public access",
+        "Incremental model \u2014 change may require a full refresh to take effect"
+      ]
+    },
+    {
+      "id": "b06_type_narrowing_on_contract",
+      "category": "breaking",
+      "expected": "high",
+      "actual": null,
+      "errored": true,
+      "resolved": [],
+      "unresolved": [],
+      "reasons": []
+    },
+    {
+      "id": "b07_removed_incremental_filter",
+      "category": "breaking",
+      "expected": "high",
+      "actual": "medium",
+      "errored": false,
+      "resolved": [
+        "fct_order_payments"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 2 exposure(s): finance_month_end, exec_dashboard (owners: Analytics Team, Finance Data)",
+        "Reaches 1 model(s) with public access",
+        "Incremental model \u2014 change may require a full refresh to take effect"
+      ]
+    },
+    {
+      "id": "b08_model_renamed",
+      "category": "breaking",
+      "expected": "high",
+      "actual": "low",
+      "errored": false,
+      "resolved": [
+        "stg_orders"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Comment or whitespace only \u2014 no semantic change"
+      ]
+    },
+    {
+      "id": "b09_incremental_key_change",
+      "category": "breaking",
+      "expected": "high",
+      "actual": "medium",
+      "errored": false,
+      "resolved": [
+        "fct_order_payments"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 2 exposure(s): finance_month_end, exec_dashboard (owners: Analytics Team, Finance Data)",
+        "Reaches 1 model(s) with public access",
+        "Incremental model \u2014 change may require a full refresh to take effect"
+      ]
+    },
+    {
+      "id": "b10_source_column_dropped",
+      "category": "breaking",
+      "expected": "high",
+      "actual": "high",
+      "errored": false,
+      "resolved": [
+        "raw_orders"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Removed column(s) `user_id` with 1 downstream node(s)"
+      ]
+    },
+    {
+      "id": "p01_comment_added",
+      "category": "should_pass",
+      "expected": "low",
+      "actual": "low",
+      "errored": false,
+      "resolved": [
+        "stg_orders"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Comment or whitespace only \u2014 no semantic change"
+      ]
+    },
+    {
+      "id": "p02_whitespace_only",
+      "category": "should_pass",
+      "expected": "low",
+      "actual": "low",
+      "errored": false,
+      "resolved": [
+        "stg_customers"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 1 exposure(s): customer_success_churn (owners: Data Science)"
+      ]
+    },
+    {
+      "id": "p03_test_added",
+      "category": "should_pass",
+      "expected": "low",
+      "actual": "high",
+      "errored": false,
+      "resolved": [
+        "stg_payments"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 1 contracted model(s): fct_order_payments",
+        "Reaches 3 exposure(s): customer_success_churn, finance_month_end, exec_dashboard (owners: Analytics Team, Data Science, Finance Data)"
+      ]
+    },
+    {
+      "id": "p04_new_unused_model",
+      "category": "should_pass",
+      "expected": "low",
+      "actual": "low",
+      "errored": false,
+      "resolved": [],
+      "unresolved": [
+        "models/staging/stg_order_status_history.sql"
+      ],
+      "reasons": []
+    },
+    {
+      "id": "p05_docs_edit",
+      "category": "should_pass",
+      "expected": "low",
+      "actual": "low",
+      "errored": false,
+      "resolved": [
+        "customers"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 1 exposure(s): customer_success_churn (owners: Data Science)"
+      ]
+    },
+    {
+      "id": "p06_reformatted_sql",
+      "category": "should_pass",
+      "expected": "low",
+      "actual": "low",
+      "errored": false,
+      "resolved": [
+        "stg_payments"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 1 contracted model(s): fct_order_payments",
+        "Reaches 3 exposure(s): customer_success_churn, finance_month_end, exec_dashboard (owners: Analytics Team, Data Science, Finance Data)"
+      ]
+    },
+    {
+      "id": "p07_config_change",
+      "category": "should_pass",
+      "expected": "low",
+      "actual": "low",
+      "errored": false,
+      "resolved": [],
+      "unresolved": [
+        "dbt_project.yml"
+      ],
+      "reasons": []
+    },
+    {
+      "id": "p08_tag_added",
+      "category": "should_pass",
+      "expected": "low",
+      "actual": "low",
+      "errored": false,
+      "resolved": [
+        "rpt_customer_revenue"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 1 exposure(s): exec_dashboard (owners: Analytics Team)"
+      ]
+    },
+    {
+      "id": "p09_new_seed",
+      "category": "should_pass",
+      "expected": "low",
+      "actual": "low",
+      "errored": false,
+      "resolved": [],
+      "unresolved": [
+        "seeds/raw_regions.csv"
+      ],
+      "reasons": []
+    },
+    {
+      "id": "p10_additive_column",
+      "category": "should_pass",
+      "expected": "low",
+      "actual": "high",
+      "errored": false,
+      "resolved": [
+        "stg_orders"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 1 contracted model(s): fct_order_payments",
+        "Reaches 3 exposure(s): customer_success_churn, finance_month_end, exec_dashboard (owners: Analytics Team, Data Science, Finance Data)"
+      ]
+    },
+    {
+      "id": "s01_pii_column_untagged",
+      "category": "subtle",
+      "expected": "medium",
+      "actual": "low",
+      "errored": false,
+      "resolved": [
+        "stg_customers"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 1 exposure(s): customer_success_churn (owners: Data Science)"
+      ]
+    },
+    {
+      "id": "s02_incremental_no_full_refresh",
+      "category": "subtle",
+      "expected": "medium",
+      "actual": "medium",
+      "errored": false,
+      "resolved": [
+        "fct_order_payments"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 2 exposure(s): finance_month_end, exec_dashboard (owners: Analytics Team, Finance Data)",
+        "Reaches 1 model(s) with public access",
+        "Incremental model \u2014 change may require a full refresh to take effect"
+      ]
+    },
+    {
+      "id": "s03_contract_widened_safely",
+      "category": "subtle",
+      "expected": "low",
+      "actual": null,
+      "errored": true,
+      "resolved": [],
+      "unresolved": [],
+      "reasons": []
+    },
+    {
+      "id": "s04_exposure_owner_change",
+      "category": "subtle",
+      "expected": "low",
+      "actual": null,
+      "errored": true,
+      "resolved": [],
+      "unresolved": [],
+      "reasons": []
+    },
+    {
+      "id": "s05_public_access_added",
+      "category": "subtle",
+      "expected": "medium",
+      "actual": "low",
+      "errored": false,
+      "resolved": [
+        "rpt_customer_revenue"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 1 exposure(s): exec_dashboard (owners: Analytics Team)"
+      ]
+    },
+    {
+      "id": "s06_column_reordered",
+      "category": "subtle",
+      "expected": "low",
+      "actual": "low",
+      "errored": false,
+      "resolved": [
+        "stg_customers"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 1 exposure(s): customer_success_churn (owners: Data Science)"
+      ]
+    },
+    {
+      "id": "s07_test_removed",
+      "category": "subtle",
+      "expected": "medium",
+      "actual": "low",
+      "errored": false,
+      "resolved": [
+        "stg_orders"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 1 contracted model(s): fct_order_payments",
+        "Reaches 3 exposure(s): customer_success_churn, finance_month_end, exec_dashboard (owners: Analytics Team, Data Science, Finance Data)"
+      ]
+    },
+    {
+      "id": "s08_materialization_changed",
+      "category": "subtle",
+      "expected": "medium",
+      "actual": "low",
+      "errored": false,
+      "resolved": [
+        "stg_orders"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 1 contracted model(s): fct_order_payments",
+        "Reaches 3 exposure(s): customer_success_churn, finance_month_end, exec_dashboard (owners: Analytics Team, Data Science, Finance Data)"
+      ]
+    },
+    {
+      "id": "s09_cross_schema_ref",
+      "category": "subtle",
+      "expected": "medium",
+      "actual": "low",
+      "errored": false,
+      "resolved": [
+        "rpt_customer_revenue"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 1 exposure(s): exec_dashboard (owners: Analytics Team)"
+      ]
+    },
+    {
+      "id": "s10_alias_change",
+      "category": "subtle",
+      "expected": "medium",
+      "actual": "medium",
+      "errored": false,
+      "resolved": [
+        "fct_order_payments"
+      ],
+      "unresolved": [],
+      "reasons": [
+        "Reaches 2 exposure(s): finance_month_end, exec_dashboard (owners: Analytics Team, Finance Data)",
+        "Reaches 1 model(s) with public access",
+        "Incremental model \u2014 change may require a full refresh to take effect"
+      ]
+    }
+  ]
+}

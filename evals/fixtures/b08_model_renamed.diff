@@ -1,0 +1,13 @@
+diff --git a/models/staging/stg_orders.sql b/models/staging/stg_order_items.sql
+similarity index 96%
+rename from models/staging/stg_orders.sql
+rename to models/staging/stg_order_items.sql
+index 1111111..2222222 100644
+--- a/models/staging/stg_orders.sql
++++ b/models/staging/stg_order_items.sql
+@@ -13,5 +13,5 @@
+     select
+         id as order_id,
+         user_id as customer_id,
+         order_date,
+         status

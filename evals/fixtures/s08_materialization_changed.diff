@@ -1,0 +1,8 @@
+diff --git a/models/staging/stg_orders.sql b/models/staging/stg_orders.sql
+index 1111111..2222222 100644
+--- a/models/staging/stg_orders.sql
++++ b/models/staging/stg_orders.sql
+@@ -1,2 +1,3 @@
++{{ config(materialized='table') }}
++
+ with source as (

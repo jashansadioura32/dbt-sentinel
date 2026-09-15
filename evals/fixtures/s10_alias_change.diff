@@ -1,0 +1,14 @@
+diff --git a/models/marts/fct_order_payments.sql b/models/marts/fct_order_payments.sql
+index 1111111..2222222 100644
+--- a/models/marts/fct_order_payments.sql
++++ b/models/marts/fct_order_payments.sql
+@@ -1,8 +1,9 @@
+ {{
+     config(
+         materialized='incremental',
+         unique_key='order_id',
++        alias='fct_order_payments_v2',
+         on_schema_change='fail',
+         contract={'enforced': true}
+     )
+ }}

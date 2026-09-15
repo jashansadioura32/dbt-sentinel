@@ -1,0 +1,9 @@
+diff --git a/models/marts/fct_order_payments.sql b/models/marts/fct_order_payments.sql
+index 1111111..2222222 100644
+--- a/models/marts/fct_order_payments.sql
++++ b/models/marts/fct_order_payments.sql
+@@ -32,4 +32,2 @@
+
+-{% if is_incremental() %}
+-    where o.order_date > (select coalesce(max(order_date), '1900-01-01') from {{ this }})
+-{% endif %}

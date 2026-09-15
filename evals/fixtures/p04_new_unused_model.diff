@@ -1,0 +1,18 @@
+diff --git a/models/staging/stg_order_status_history.sql b/models/staging/stg_order_status_history.sql
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/models/staging/stg_order_status_history.sql
+@@ -0,0 +1,12 @@
++-- New staging model. Nothing refs it yet.
++
++with source as (
++
++    select * from {{ ref('raw_orders') }}
++
++)
++
++select
++    id as order_id,
++    status as order_status
++from source
