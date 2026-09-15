@@ -33,8 +33,15 @@ pip install -e ".[agent]"          # the reviewer agent (anthropic, pydantic)
 pip install -e ".[server]"         # the webhook receiver (fastapi, uvicorn, cryptography)
 ```
 
-Install `.[dev]` rather than bare `.` — the test command below needs pytest, and a plain
-`pip install -e .` leaves it missing.
+Install `.[dev]` rather than bare `.` — the test command below needs pytest and the
+Pydantic schema the agent tests exercise, and a plain `pip install -e .` leaves them
+missing.
+
+**Windows:** clone to a short path such as `C:\src\dbt-sentinel`. Installing `anthropic`
+under a deeply nested directory can fail with `OSError: [Errno 2] No such file or
+directory` on one of its longer filenames — that is Windows' 260-character path limit,
+not a packaging fault. Either shorten the path or enable long paths:
+`reg add HKLM\SYSTEM\CurrentControlSet\Control\FileSystem /v LongPathsEnabled /t REG_DWORD /d 1 /f`
 
 Only `pyyaml` is a runtime dependency: the policy pack is YAML, and retrieval is part of
 the deterministic path. Retrieval itself is stdlib-only, so the published eval numbers
