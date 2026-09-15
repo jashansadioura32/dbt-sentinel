@@ -37,6 +37,25 @@ than fixed on sight so the before/after comparison survives.
   a new `- name:` under a `tests:` key is misread as a new column. Drives the 0.200
   false-positive rate on the should-pass block.
 
+## Found by the day-4 retrieval baseline, deferred
+
+Measured in `evals/BASELINE.md`. Not tuned further on purpose: day 4 measures, and
+tuning a retriever against the same 30 fixtures it is scored on is overfitting.
+
+- **Lexical retrieval cannot match a paraphrase.** `s02_incremental_no_full_refresh`
+  expects `incremental-safety`; the diff says `* 1.1` and the rule's vocabulary is
+  `full_refresh` / `backfill` / `is_incremental`. Zero lexical overlap, so it misses.
+  This is the strongest argument in the suite for real semantic embeddings, and the
+  honest cost of the zero-dependency choice.
+- **Residual PII noise on context lines.** 6 of 11 no-rule fixtures still draw a rule,
+  usually `pii-tagging` matching `first_name` / `last_name` on unchanged *context* lines
+  in a whitespace diff. Fix is to weight added/removed lines above context lines in
+  `summarise_change`.
+- **Renames carry no vocabulary.** `b08_model_renamed` has no changed content lines, so
+  the retrieval query is nearly empty and `contract-breaking-change` misses. The rename
+  is detectable structurally; the query builder should synthesise vocabulary from the
+  change type rather than relying on diff text.
+
 ## Considered and rejected for v1
 
 - Web UI / dashboard — a non-goal, not a deferral.

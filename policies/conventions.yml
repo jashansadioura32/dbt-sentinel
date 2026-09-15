@@ -1,0 +1,93 @@
+# Layering, naming and materialization conventions.
+#
+# The softest rules in the pack, and deliberately so: most are LOW or MEDIUM. A
+# governance tool that treats a naming convention as loudly as a dropped contract column
+# teaches reviewers to ignore all of its output.
+
+rules:
+  - rule_id: naming-convention
+    title: Model name, alias or target schema changed
+    severity: medium
+    applies_to:
+      node_kinds: [model]
+      path_globs: ["models/**"]
+    description: >
+      `ref()` resolves through aliases and custom schemas, so consumers inside the
+      project keep working. Everything outside dbt does not: BI tools, scheduled
+      queries, grants and reverse-ETL jobs all address the physical relation by name.
+      The blast radius of a rename or a schema move therefore extends past the DAG, where
+      model-level lineage cannot see it.
+    keywords:
+      - alias
+      - schema
+      - custom schema
+      - rename
+      - naming
+      - relation
+      - fully qualified
+      - stg_
+      - fct_
+      - dim_
+    example_violation: >
+      A public reporting mart gains `schema='reporting'`, so the BI dashboard pointing at
+      the old fully-qualified name breaks while dbt itself builds cleanly.
+    guidance: >
+      Search for the old relation name outside the dbt project before merging, and
+      coordinate the cutover with the owners of anything that addresses it directly.
+
+  - rule_id: staging-layer-purity
+    title: Staging model doing more than renaming and casting
+    severity: medium
+    applies_to:
+      node_kinds: [model]
+      path_globs: ["models/staging/**", "models/**/stg_*.sql"]
+    description: >
+      Staging models are conventionally thin: select from one source, rename columns,
+      cast types, and materialize as views so they are always live. Adding joins,
+      aggregations or business logic there creates a dependency the rest of the project
+      does not expect, and materializing one as a table introduces staleness between
+      runs for every node downstream of it.
+    keywords:
+      - staging
+      - stg_
+      - view
+      - table
+      - materialized
+      - join
+      - aggregate
+      - business logic
+      - source
+    example_violation: >
+      A staging model is changed from a view to a table, so seven downstream nodes now
+      read a point-in-time snapshot that goes stale between runs.
+    guidance: >
+      Keep staging models as views selecting from a single source. Put joins and
+      aggregations in the intermediate or mart layer where consumers expect them.
+
+  - rule_id: materialization-review
+    title: Materialization changed
+    severity: medium
+    applies_to:
+      node_kinds: [model]
+      path_globs: ["models/**"]
+    description: >
+      Materialization decides freshness, cost and locking behaviour. view to table trades
+      liveness for query speed; table to incremental trades completeness for build cost
+      and introduces the partial-update hazards of incrementality; anything to ephemeral
+      removes the relation other tools may be addressing directly. Query results can be
+      identical while operational behaviour changes for every downstream node.
+    keywords:
+      - materialized
+      - materialization
+      - view
+      - table
+      - incremental
+      - ephemeral
+      - snapshot
+      - config
+    example_violation: >
+      A mart is switched to `ephemeral`, silently removing the physical table that a
+      reverse-ETL job was reading.
+    guidance: >
+      State the reason for the change in the PR description, and check whether anything
+      outside dbt reads the relation before removing or snapshotting it.

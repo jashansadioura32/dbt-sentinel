@@ -104,9 +104,89 @@ python -m evals.runner --only breaking  # one block
 The manifest is pinned at `evals/manifest/manifest.json` so results do not depend on a
 clone outside the repo. To regenerate it, see [fixtures/README.md](fixtures/README.md).
 
+## Retrieval baseline (day 4)
+
+14 rules across 4 policy files, scored by `python -m evals.retrieval_eval`. Measured
+**separately from severity accuracy on purpose**: when the day-6 agent gets a fixture
+wrong, the cause is either "the right rule never reached the model" or "the right rule
+reached it and it reasoned badly". Those need different fixes, and one end-to-end number
+cannot separate them.
+
+| Metric | Value |
+|---|---|
+| Precision@3 | **0.708** |
+| Recall@3 | 0.630 |
+| Hit@3 (≥1 expected rule found) | 0.684 |
+| **Correct silence on no-rule fixtures** | **0.455** |
+
+Scored over 19 fixtures expecting at least one rule; 11 expecting none.
+
+### Acceptance criteria
+
+Both build-plan criteria pass, and the second is the one that matters:
+
+```
+s01_pii_column_untagged  -> pii-tagging (0.493)     [PII rule in top-3]
+b05_changed_join_grain   -> grain-integrity (0.566) [no PII rule at all]
+p01_comment_added        -> no rule matched          [silence on a comment]
+```
+
+A retriever that returned the PII rule on every diff would pass the first criterion and
+be worthless. `correct_silence_rate` exists so that failure cannot hide.
+
+### What "embedding similarity" means here
+
+It is **TF-IDF cosine over the rule pack**, stdlib only — not a semantic embedding. Named
+plainly because the limitation is specific: it matches a paraphrase only when the
+vocabulary overlaps. That is why every rule carries an explicit `keywords` list, and why
+a curated keyword hit outranks a marginally higher cosine.
+
+Bought in exchange: no embeddings dependency, no API key, fully offline, and
+deterministic — anyone who clones the repo reproduces these numbers exactly. Rejected
+alternatives are in ADR form on day 10.
+
+**Only the rule pack is vectorised.** The manifest, lineage graph and SQL are never
+embedded — reach is a BFS and file resolution is a string match, both exact. Design
+rule 1.
+
+### Noise defect found and fixed during this session
+
+First measured run scored **precision@3 0.400 / correct silence 0.273** — 8 of 11
+no-rule fixtures drew spurious rules. `--explain` showed why: `summarise_change` fed the
+node's own *ambient* attributes into the query, so `stg_` matched `staging-layer-purity`
+on every staging file and `protected` matched `public-access-review` on every node. Those
+are path and config facts, true of every diff touching the node, not evidence that
+anything was violated.
+
+Two fixes: the query is now built only from what *changed* (a comment-only edit produces
+an empty query and therefore silence), and citing a rule requires either a curated
+keyword hit or a cosine above a floor, since TF-IDF gives a small positive score to any
+incidental shared token.
+
+| | Precision@3 | Correct silence |
+|---|---|---|
+| Before | 0.400 | 0.273 |
+| After | **0.708** | **0.455** |
+
+The day-3 severity baseline is unchanged at 0.800 / 0.533 / 0.200, confirming retrieval
+did not perturb the measurement it will later be compared against.
+
+### Retrieval failures remaining (not fixed)
+
+| Fixture | Expected | Why it misses |
+|---|---|---|
+| `b03`, `b06`, `s03` | contract rules | Node never resolves — the day-3 YAML attribution defect, upstream of retrieval |
+| `s04_exposure_owner_change` | `exposure-ownership` | Same: exposures resolve to no node |
+| `b08_model_renamed` | `contract-breaking-change` | Rename carries no changed lines, so the query has almost no vocabulary |
+| `s02_incremental_no_full_refresh` | `incremental-safety` | Diff says `* 1.1`; the rule's vocabulary is `full_refresh`, `backfill`, `is_incremental` — no lexical overlap. **The clearest case for semantic matching in the suite.** |
+
+Residual noise: 6 of 11 no-rule fixtures still draw a rule, mostly `pii-tagging` firing
+on `first_name`/`last_name` context lines in a whitespace diff. Parked in ROADMAP.md
+rather than tuned further — day 4 is measurement, and tuning against the eval set is how
+a retriever gets overfitted to 30 fixtures.
+
 ## What is not measured here
 
-- **Retrieval precision@3** — no policy pack yet (day 4).
 - **Cost and latency** — no LLM calls (day 6).
 - **Agent vs. baseline** — the point of this file is to exist before that comparison.
 - **Column-level correctness.** The suite scores the severity of a PR, not whether the

@@ -1,0 +1,460 @@
+{
+  "summary": {
+    "top_k": 3,
+    "n_fixtures": 30,
+    "n_expecting_rules": 19,
+    "n_expecting_no_rules": 11,
+    "precision_at_k": 0.708,
+    "recall_at_k": 0.63,
+    "hit_at_k": 0.684,
+    "correct_silence_rate": 0.455,
+    "pack_size": 14
+  },
+  "rows": [
+    {
+      "id": "b01_column_rename_with_consumers",
+      "category": "breaking",
+      "expected": [
+        "contract-breaking-change"
+      ],
+      "retrieved": [
+        "contract-breaking-change"
+      ],
+      "hits": [
+        "contract-breaking-change"
+      ],
+      "resolved_nodes": [
+        "stg_orders"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "b02_model_deletion_with_consumers",
+      "category": "breaking",
+      "expected": [
+        "contract-breaking-change"
+      ],
+      "retrieved": [
+        "contract-breaking-change",
+        "staging-layer-purity",
+        "naming-convention"
+      ],
+      "hits": [
+        "contract-breaking-change"
+      ],
+      "resolved_nodes": [
+        "stg_payments"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "b03_contract_column_dropped",
+      "category": "breaking",
+      "expected": [
+        "contract-enforcement",
+        "contract-breaking-change"
+      ],
+      "retrieved": [],
+      "hits": [],
+      "resolved_nodes": [],
+      "unresolvable": true
+    },
+    {
+      "id": "b04_dropped_dedup",
+      "category": "breaking",
+      "expected": [
+        "grain-integrity"
+      ],
+      "retrieved": [
+        "grain-integrity"
+      ],
+      "hits": [
+        "grain-integrity"
+      ],
+      "resolved_nodes": [
+        "stg_customers"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "b05_changed_join_grain",
+      "category": "breaking",
+      "expected": [
+        "grain-integrity"
+      ],
+      "retrieved": [
+        "grain-integrity"
+      ],
+      "hits": [
+        "grain-integrity"
+      ],
+      "resolved_nodes": [
+        "fct_order_payments"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "b06_type_narrowing_on_contract",
+      "category": "breaking",
+      "expected": [
+        "contract-enforcement",
+        "type-safety"
+      ],
+      "retrieved": [],
+      "hits": [],
+      "resolved_nodes": [],
+      "unresolvable": true
+    },
+    {
+      "id": "b07_removed_incremental_filter",
+      "category": "breaking",
+      "expected": [
+        "incremental-safety"
+      ],
+      "retrieved": [
+        "incremental-safety",
+        "pii-tagging",
+        "materialization-review"
+      ],
+      "hits": [
+        "incremental-safety"
+      ],
+      "resolved_nodes": [
+        "fct_order_payments"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "b08_model_renamed",
+      "category": "breaking",
+      "expected": [
+        "contract-breaking-change"
+      ],
+      "retrieved": [],
+      "hits": [],
+      "resolved_nodes": [
+        "stg_orders"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "b09_incremental_key_change",
+      "category": "breaking",
+      "expected": [
+        "incremental-safety",
+        "grain-integrity"
+      ],
+      "retrieved": [
+        "incremental-safety",
+        "grain-integrity",
+        "contract-breaking-change"
+      ],
+      "hits": [
+        "grain-integrity",
+        "incremental-safety"
+      ],
+      "resolved_nodes": [
+        "fct_order_payments"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "b10_source_column_dropped",
+      "category": "breaking",
+      "expected": [
+        "source-freshness",
+        "contract-breaking-change"
+      ],
+      "retrieved": [
+        "contract-breaking-change",
+        "pii-tagging"
+      ],
+      "hits": [
+        "contract-breaking-change"
+      ],
+      "resolved_nodes": [
+        "raw_orders"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "p01_comment_added",
+      "category": "should_pass",
+      "expected": [],
+      "retrieved": [],
+      "hits": [],
+      "resolved_nodes": [
+        "stg_orders"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "p02_whitespace_only",
+      "category": "should_pass",
+      "expected": [],
+      "retrieved": [
+        "pii-tagging"
+      ],
+      "hits": [],
+      "resolved_nodes": [
+        "stg_customers"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "p03_test_added",
+      "category": "should_pass",
+      "expected": [],
+      "retrieved": [
+        "test-coverage-keys",
+        "contract-breaking-change",
+        "pii-tagging"
+      ],
+      "hits": [],
+      "resolved_nodes": [
+        "stg_payments"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "p04_new_unused_model",
+      "category": "should_pass",
+      "expected": [],
+      "retrieved": [],
+      "hits": [],
+      "resolved_nodes": [],
+      "unresolvable": true
+    },
+    {
+      "id": "p05_docs_edit",
+      "category": "should_pass",
+      "expected": [],
+      "retrieved": [
+        "materialization-review"
+      ],
+      "hits": [],
+      "resolved_nodes": [
+        "customers"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "p06_reformatted_sql",
+      "category": "should_pass",
+      "expected": [],
+      "retrieved": [],
+      "hits": [],
+      "resolved_nodes": [
+        "stg_payments"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "p07_config_change",
+      "category": "should_pass",
+      "expected": [],
+      "retrieved": [],
+      "hits": [],
+      "resolved_nodes": [],
+      "unresolvable": true
+    },
+    {
+      "id": "p08_tag_added",
+      "category": "should_pass",
+      "expected": [],
+      "retrieved": [
+        "public-access-review",
+        "materialization-review",
+        "model-grouping"
+      ],
+      "hits": [],
+      "resolved_nodes": [
+        "rpt_customer_revenue"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "p09_new_seed",
+      "category": "should_pass",
+      "expected": [],
+      "retrieved": [],
+      "hits": [],
+      "resolved_nodes": [],
+      "unresolvable": true
+    },
+    {
+      "id": "p10_additive_column",
+      "category": "should_pass",
+      "expected": [],
+      "retrieved": [
+        "contract-breaking-change"
+      ],
+      "hits": [],
+      "resolved_nodes": [
+        "stg_orders"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "s01_pii_column_untagged",
+      "category": "subtle",
+      "expected": [
+        "pii-tagging"
+      ],
+      "retrieved": [
+        "pii-tagging"
+      ],
+      "hits": [
+        "pii-tagging"
+      ],
+      "resolved_nodes": [
+        "stg_customers"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "s02_incremental_no_full_refresh",
+      "category": "subtle",
+      "expected": [
+        "incremental-safety"
+      ],
+      "retrieved": [],
+      "hits": [],
+      "resolved_nodes": [
+        "fct_order_payments"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "s03_contract_widened_safely",
+      "category": "subtle",
+      "expected": [
+        "contract-enforcement"
+      ],
+      "retrieved": [],
+      "hits": [],
+      "resolved_nodes": [],
+      "unresolvable": true
+    },
+    {
+      "id": "s04_exposure_owner_change",
+      "category": "subtle",
+      "expected": [
+        "exposure-ownership"
+      ],
+      "retrieved": [],
+      "hits": [],
+      "resolved_nodes": [],
+      "unresolvable": true
+    },
+    {
+      "id": "s05_public_access_added",
+      "category": "subtle",
+      "expected": [
+        "public-access-review",
+        "model-grouping"
+      ],
+      "retrieved": [
+        "public-access-review",
+        "model-grouping"
+      ],
+      "hits": [
+        "model-grouping",
+        "public-access-review"
+      ],
+      "resolved_nodes": [
+        "rpt_customer_revenue"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "s06_column_reordered",
+      "category": "subtle",
+      "expected": [],
+      "retrieved": [
+        "pii-tagging"
+      ],
+      "hits": [],
+      "resolved_nodes": [
+        "stg_customers"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "s07_test_removed",
+      "category": "subtle",
+      "expected": [
+        "test-coverage-keys"
+      ],
+      "retrieved": [
+        "test-coverage-keys"
+      ],
+      "hits": [
+        "test-coverage-keys"
+      ],
+      "resolved_nodes": [
+        "stg_orders"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "s08_materialization_changed",
+      "category": "subtle",
+      "expected": [
+        "staging-layer-purity",
+        "materialization-review"
+      ],
+      "retrieved": [
+        "materialization-review",
+        "staging-layer-purity"
+      ],
+      "hits": [
+        "materialization-review",
+        "staging-layer-purity"
+      ],
+      "resolved_nodes": [
+        "stg_orders"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "s09_cross_schema_ref",
+      "category": "subtle",
+      "expected": [
+        "naming-convention",
+        "public-access-review"
+      ],
+      "retrieved": [
+        "public-access-review",
+        "materialization-review",
+        "naming-convention"
+      ],
+      "hits": [
+        "naming-convention",
+        "public-access-review"
+      ],
+      "resolved_nodes": [
+        "rpt_customer_revenue"
+      ],
+      "unresolvable": false
+    },
+    {
+      "id": "s10_alias_change",
+      "category": "subtle",
+      "expected": [
+        "naming-convention",
+        "contract-breaking-change"
+      ],
+      "retrieved": [
+        "naming-convention"
+      ],
+      "hits": [
+        "naming-convention"
+      ],
+      "resolved_nodes": [
+        "fct_order_payments"
+      ],
+      "unresolvable": false
+    }
+  ]
+}

@@ -4,13 +4,15 @@ version = "0.2.0"
 description = "Blast-radius review for dbt pull requests"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
-# Day 2 is deliberately dependency-free: the deterministic core needs nothing but the
-# stdlib. Extras below are added in the day they are first used, not up front.
-dependencies = []
+# pyyaml is the only runtime dependency: the day-4 policy pack is YAML, and retrieval
+# is part of the core deterministic path rather than an LLM add-on. Retrieval itself is
+# stdlib-only (TF-IDF over the rule pack) specifically to avoid an embeddings dependency
+# and to keep eval numbers reproducible offline.
+dependencies = ["pyyaml"]
 
 [project.optional-dependencies]
-# Day 4-5: policy pack, retrieval, and the reviewer agent.
-agent = ["anthropic", "pydantic", "pyyaml"]
+# Day 5: the reviewer agent. pydantic only at the LLM boundary, per CLAUDE.md.
+agent = ["anthropic", "pydantic"]
 # Day 5-8: webhook receiver for the GitHub App.
 server = ["fastapi", "uvicorn"]
 dev = ["pytest"]

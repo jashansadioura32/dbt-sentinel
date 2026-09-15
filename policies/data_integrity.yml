@@ -1,0 +1,94 @@
+# Grain, incrementality and test-coverage rules.
+#
+# The failure mode these share: nothing errors. The build goes green and the numbers are
+# wrong. That is why they are weighted as heavily as the contract rules despite never
+# producing a compilation failure.
+
+rules:
+  - rule_id: grain-integrity
+    title: Change that alters the grain of a model
+    severity: high
+    applies_to:
+      node_kinds: [model]
+      path_globs: ["models/**/*.sql"]
+    description: >
+      The grain is the set of columns that uniquely identifies a row. Removing a
+      `distinct`, changing a join type, dropping a `group by` column, or changing an
+      incremental `unique_key` all change the grain. Nothing fails to compile: joins
+      downstream fan out, aggregates inflate, and the error surfaces as a number nobody
+      trusts weeks later. A left join becoming an inner join silently drops rows instead.
+    keywords:
+      - distinct
+      - group by
+      - join
+      - inner join
+      - left join
+      - unique_key
+      - grain
+      - duplicate
+      - fan out
+      - row count
+    example_violation: >
+      The `distinct` guaranteeing one row per customer is removed from a staging model,
+      so every downstream join against it multiplies rows.
+    guidance: >
+      State the intended grain in the model description and assert it with a `unique`
+      test on the key. If the grain change is deliberate, update those tests in the same
+      PR so the assertion and the intent stay in agreement.
+
+  - rule_id: incremental-safety
+    title: Incremental model changed without a refresh strategy
+    severity: high
+    applies_to:
+      node_kinds: [model]
+      path_globs: ["models/**/*.sql"]
+      requires:
+        materialization: incremental
+    description: >
+      An incremental model only processes new rows, so rows already materialised keep the
+      old logic. Changing a calculation leaves a column whose arithmetic depends on when
+      each row was built — internally inconsistent data that no test detects. Removing
+      the `is_incremental()` guard instead causes a full reprocess on every run, and
+      changing `unique_key` silently changes the table's grain.
+    keywords:
+      - incremental
+      - is_incremental
+      - full_refresh
+      - unique_key
+      - on_schema_change
+      - merge
+      - backfill
+    example_violation: >
+      A monetary calculation gains a multiplier in an incremental mart with no full
+      refresh, so old rows keep the unmultiplied value.
+    guidance: >
+      Say in the PR description whether a `--full-refresh` is required, and schedule it
+      with the merge. If the logic change only applies going forward by design, document
+      that in the model so the inconsistency is intentional and visible.
+
+  - rule_id: test-coverage-keys
+    title: Test removed from or missing on a key column
+    severity: medium
+    applies_to:
+      node_kinds: [model]
+      path_globs: ["models/**/*.yml"]
+    description: >
+      `unique` and `not_null` on a primary or join key are how a project detects grain
+      breakage before consumers do. Removing them changes no output — it removes the
+      ability to notice the next defect. The cost of the loss scales with how many nodes
+      depend on the model.
+    keywords:
+      - tests
+      - not_null
+      - unique
+      - accepted_values
+      - relationships
+      - primary key
+      - coverage
+    example_violation: >
+      `not_null` is removed from the primary key of a staging model with seven
+      downstream consumers.
+    guidance: >
+      Keep `unique` and `not_null` on every primary key. If a test is removed because it
+      was failing, fix the data or narrow the test with a `where` config rather than
+      deleting the assertion.

@@ -1,0 +1,115 @@
+# Contract and interface rules.
+#
+# These cover the promises a model makes to its consumers: declared columns, declared
+# types, and the continued existence of the node itself. dbt enforces some of this at
+# build time (contract.enforced) and none of the rest, which is why they are here.
+
+rules:
+  - rule_id: contract-breaking-change
+    title: Breaking change to a column or model other nodes depend on
+    severity: high
+    applies_to:
+      node_kinds: [model, source, seed, snapshot]
+      path_globs: ["models/**", "seeds/**", "snapshots/**"]
+    description: >
+      Removing or renaming a column, deleting a model, or renaming a model file breaks
+      every downstream node that references it. dbt does not rewrite references, so the
+      symptom is a compilation failure on the next run rather than a silent data change.
+      Severity scales with the number of downstream consumers and whether any exposure
+      or contracted model is reachable. Additive changes are not breaking: SQL ignores
+      columns it does not select.
+    keywords:
+      - rename
+      - renamed
+      - removed column
+      - dropped column
+      - deleted model
+      - breaking change
+      - ref
+      - downstream
+    example_violation: >
+      `user_id as customer_id` becomes `user_id as cust_id` in a staging model that three
+      marts select customer_id from. All three fail to compile.
+    guidance: >
+      Ship the rename as an additive change first: add the new column, migrate consumers
+      in a follow-up PR, then remove the old column. If the rename must land at once,
+      update every downstream reference in the same PR.
+
+  - rule_id: contract-enforcement
+    title: Change to a model with an enforced contract
+    severity: high
+    applies_to:
+      node_kinds: [model]
+      path_globs: ["models/**"]
+      requires:
+        is_contracted: true
+    description: >
+      A model with `contract.enforced: true` has published its column names and data
+      types as a guarantee. dbt validates the model output against that declaration and
+      fails the build on any disagreement. Editing the contract block is therefore a
+      deliberate interface change and must be reviewed as one — but direction matters:
+      widening a type is safe, narrowing it is not.
+    keywords:
+      - contract
+      - enforced
+      - data_type
+      - constraints
+      - interface
+    example_violation: >
+      `customer_id` is deleted from the columns list of a mart with an enforced contract
+      while a downstream report still selects it.
+    guidance: >
+      Version the model (`v2`) and deprecate the old version rather than mutating a live
+      contract. If the change is additive or a widening, say so explicitly in the PR
+      description so reviewers do not have to infer the direction.
+
+  - rule_id: type-safety
+    title: Column type narrowed or changed incompatibly
+    severity: high
+    applies_to:
+      node_kinds: [model]
+      path_globs: ["models/**"]
+    description: >
+      Narrowing a column type — double to integer, bigint to int, text to varchar(n) —
+      truncates or rejects values that previously fit. On an enforced contract dbt fails
+      the build; without one the data is silently degraded. Widening in the other
+      direction is backward compatible and should not be flagged.
+    keywords:
+      - data_type
+      - type
+      - numeric
+      - integer
+      - narrow
+      - cast
+      - precision
+    example_violation: >
+      A monetary column declared `double` is changed to `integer`, truncating every
+      fractional amount in a finance mart.
+    guidance: >
+      Widen rather than narrow. If a narrowing is genuinely required, backfill and
+      validate the affected column in a separate migration before changing the type.
+
+  - rule_id: source-freshness
+    title: Source declaration changed out from under its consumers
+    severity: high
+    applies_to:
+      node_kinds: [source]
+      path_globs: ["models/**/*.yml", "models/**/sources.yml"]
+    description: >
+      A source declaration describes a table this project does not own. Removing a column
+      from it signals an upstream schema change, and any staging model selecting that
+      column breaks on the next run. Freshness thresholds and loaded_at fields belong to
+      the same contract with the upstream team.
+    keywords:
+      - source
+      - sources
+      - freshness
+      - loaded_at
+      - upstream
+      - external table
+    example_violation: >
+      `user_id` is removed from the `ecom.raw_orders` source while a staging model still
+      selects it.
+    guidance: >
+      Update the consuming staging models in the same PR, and confirm with the upstream
+      owner whether the column is gone from the table or only from the declaration.

@@ -12,6 +12,41 @@ from .lineage import Lineage, ManifestError
 from .report import build_assessments, render_markdown, render_mermaid
 
 
+def _explain_retrieval(changes: list, policy_dir: str | None) -> str:
+    """Render what retrieval did and why, including what it eliminated.
+
+    Showing only the winners makes a retrieval bug look like a reasoning bug. The
+    eliminated list is what distinguishes "the rule was never a candidate" from "the
+    rule was a candidate and scored too low".
+    """
+    from .retrieval import PolicyPack, summarise_change
+
+    try:
+        pack = PolicyPack.load(policy_dir)
+    except (FileNotFoundError, ValueError) as exc:
+        return f"\n## Policy retrieval\n\n> ⚠️ Policy pack unavailable: {exc}"
+
+    pack.load_cache()
+
+    lines = ["", "## Policy retrieval", "", f"Pack: {len(pack)} rules"]
+    for changed in changes:
+        summary = summarise_change(changed)
+        result = pack.retrieve(changed, summary)
+        lines.append("")
+        lines.append(f"### `{changed.node.name}`")
+        if not result.retrieved:
+            lines.append("- No rule matched. Structural scoring only.")
+        for item in result.retrieved:
+            matched = f" · keywords: {', '.join(item.matched_keywords)}" if item.matched_keywords else ""
+            lines.append(
+                f"- `{item.rule_id}` ({item.rule.severity}) score={item.score:.3f}{matched}"
+            )
+        lines.append(f"- _{len(result.eliminated)} rule(s) eliminated by prefilter_")
+
+    pack.save_cache()
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="dbt-sentinel")
     parser.add_argument("--manifest", required=True, help="path to target/manifest.json")
@@ -29,6 +64,15 @@ def main(argv: list[str] | None = None) -> int:
             "ISO-8601 timestamp of the change under review (e.g. the PR head commit "
             "date). If the manifest predates it, a staleness warning is emitted."
         ),
+    )
+    parser.add_argument(
+        "--explain",
+        action="store_true",
+        help="show which policy rules were retrieved per change, with scores",
+    )
+    parser.add_argument(
+        "--policies",
+        help="path to the policy pack directory (default: ./policies)",
     )
     args = parser.parse_args(argv)
 
@@ -69,6 +113,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"\n<!-- {a.changed.node.name} -->\n```mermaid")
             print(render_mermaid(a))
             print("```")
+
+    if args.explain:
+        print(_explain_retrieval(changes, args.policies))
 
     if args.fail_on != "never":
         threshold = {"high": 2, "medium": 1, "low": 0}[args.fail_on]

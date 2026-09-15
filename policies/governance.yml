@@ -1,0 +1,111 @@
+# PII, access and ownership rules.
+#
+# These are the rules that are never technical failures. The build passes, the data is
+# correct, and the organisation has still taken on a risk it did not review.
+
+rules:
+  - rule_id: pii-tagging
+    title: Personally identifiable column added without tagging
+    severity: medium
+    applies_to:
+      node_kinds: [model, source]
+      path_globs: ["models/**", "seeds/**"]
+    description: >
+      Columns holding personal data — email, phone, name, address, date of birth,
+      government identifiers — must be tagged so masking policies, access grants and
+      deletion requests can find them. An untagged PII column is invisible to every
+      downstream control, and it propagates to every model that selects it.
+    keywords:
+      - pii
+      - email
+      - phone
+      - address
+      - first_name
+      - last_name
+      - date_of_birth
+      - ssn
+      - personal data
+      - gdpr
+      - masking
+      - sensitive
+    example_violation: >
+      `email_address` is added to a customer staging model with no meta tag, no masking
+      policy, and no description marking it as personal data.
+    guidance: >
+      Add `meta: {contains_pii: true}` and the project's masking policy to the column in
+      its schema.yml, in the same PR that introduces the column.
+
+  - rule_id: public-access-review
+    title: Model access widened to public
+    severity: medium
+    applies_to:
+      node_kinds: [model]
+      path_globs: ["models/**"]
+    description: >
+      `access: public` lets other dbt projects reference a model, so its columns become a
+      published interface to consumers this repository cannot see or test. Every later
+      change to those columns is a breaking change for someone invisible to the PR
+      author. Widening access is cheap; narrowing it later is not.
+    keywords:
+      - access
+      - public
+      - protected
+      - private
+      - cross-project
+      - group
+      - interface
+    example_violation: >
+      A reporting mart is switched from `protected` to `public` with no contract and no
+      owner, exposing an unstable column list to other teams.
+    guidance: >
+      Pair `access: public` with an enforced contract and an owning group, so the
+      published surface is explicit and validated on every build.
+
+  - rule_id: model-grouping
+    title: Model group or ownership boundary changed
+    severity: low
+    applies_to:
+      node_kinds: [model]
+      path_globs: ["models/**"]
+    description: >
+      Groups declare which team owns a model and restrict who may reference private
+      models. Changing a model's group moves an ownership boundary, which affects review
+      routing and cross-project access even though no SQL changes.
+    keywords:
+      - group
+      - groups
+      - owner
+      - team
+      - access
+      - boundary
+    example_violation: >
+      A mart is moved into a different group without the receiving team being named as
+      reviewer on the PR.
+    guidance: >
+      Name the receiving team in the PR description and get an approval from them.
+
+  - rule_id: exposure-ownership
+    title: Exposure definition or owner changed
+    severity: low
+    applies_to:
+      node_kinds: [exposure]
+      path_globs: ["models/**/*.yml", "models/**/exposures.yml"]
+    description: >
+      An exposure records a downstream consumer — a dashboard, a report, an ML job — and
+      its owner is who gets contacted when upstream models change. Changing the owner
+      changes the escalation path. Changing `depends_on` changes what the project
+      believes that consumer reads, and a wrong dependency means missed warnings.
+    keywords:
+      - exposure
+      - exposures
+      - owner
+      - dashboard
+      - depends_on
+      - maturity
+      - consumer
+    example_violation: >
+      A dashboard exposure's owner is reassigned with no handover, so breaking-change
+      warnings are routed to a team that does not maintain it.
+    guidance: >
+      Confirm the incoming owner has accepted the handover, and keep `depends_on`
+      accurate so upstream changes reach the right people.
