@@ -87,13 +87,71 @@ def summarise_payload(event: str, payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def handle_event(event: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """Day 5 stub: log what day 8 will act on, and say plainly that nothing ran.
+def run_review(summary: dict[str, Any], installation_id: int, client: Any = None) -> dict[str, Any]:
+    """Fetch, review, post, and set a commit status for one pull request.
 
-    Returning `pipeline_ran: False` rather than a cheerful 200 with no detail keeps the
-    stub honest — a deployment that silently does nothing looks identical to one that
-    works until someone checks a PR.
+    Wrapped in a broad except on purpose: a webhook handler that raises returns 500, and
+    GitHub then retries the same delivery repeatedly. Failing once, visibly, with a
+    status of `error` is better than a retry storm that posts nothing either way.
     """
+    from .github import GitHubClient, GitHubError, PullRequestRef
+    from .pipeline import COMMENT_MARKER, review_pull_request
+
+    owner, _, repo = (summary["repo"] or "").partition("/")
+    pr = PullRequestRef(
+        owner=owner,
+        repo=repo,
+        number=summary["pr_number"],
+        head_sha=summary["head_sha"] or "",
+        base_ref=summary["base_ref"] or "main",
+    )
+
+    try:
+        github = client or GitHubClient.for_installation(installation_id)
+    except GitHubError as exc:
+        logger.error("app auth failed: %s", exc)
+        return {"ok": False, "pipeline_ran": False, "error": str(exc)}
+
+    try:
+        github.set_commit_status(pr, "pending", "Reviewing dbt changes...")
+        outcome = review_pull_request(github, pr)
+        github.upsert_comment(pr, outcome.comment, COMMENT_MARKER)
+        github.set_commit_status(pr, outcome.status_state, outcome.status_description)
+    except GitHubError as exc:
+        logger.error("review failed for %s#%s: %s", pr.slug, pr.number, exc)
+        try:
+            github.set_commit_status(pr, "error", f"Review failed: {exc}")
+        except GitHubError:
+            pass  # the status is a courtesy; the log is the record
+        return {"ok": False, "pipeline_ran": False, "error": str(exc)}
+
+    logger.info(
+        "reviewed %s#%s: severity=%s manifest=%s cost=$%.4f %.1fs",
+        pr.slug,
+        pr.number,
+        outcome.severity,
+        outcome.manifest_source,
+        outcome.cost_usd,
+        outcome.latency_s,
+    )
+    return {
+        "ok": True,
+        "pipeline_ran": True,
+        "severity": outcome.severity,
+        "status": outcome.status_state,
+        "manifest_source": outcome.manifest_source,
+        "agent_ran": outcome.agent_ran,
+        "cost_usd": round(outcome.cost_usd, 4),
+        "latency_s": round(outcome.latency_s, 2),
+        "warnings": len(outcome.warnings),
+    }
+
+
+def handle_event(
+    event: str, payload: dict[str, Any], *, client: Any = None, review: bool = True
+) -> dict[str, Any]:
+    """Route one delivery. `review=False` keeps the day-5 log-only behaviour for smoke
+    tests against a live endpoint without posting to anyone's PR."""
     if event == "ping":
         return {"ok": True, "pong": True, "pipeline_ran": False}
 
@@ -107,13 +165,17 @@ def handle_event(event: str, payload: dict[str, Any]) -> dict[str, Any]:
     if not summary["actionable"]:
         return {"ok": True, "ignored": True, "reason": "non-actionable action", "pipeline_ran": False}
 
-    # Day 8: fetch diff -> source manifest -> run pipeline -> post review + status.
-    return {
-        "ok": True,
-        "received": summary,
-        "pipeline_ran": False,
-        "note": "day-5 skeleton: signature verified and payload logged, pipeline not wired",
-    }
+    installation_id = (payload.get("installation") or {}).get("id")
+    if not review:
+        return {"ok": True, "received": summary, "pipeline_ran": False, "note": "review disabled"}
+    if not installation_id:
+        return {
+            "ok": False,
+            "pipeline_ran": False,
+            "error": "payload carries no installation id, so the App cannot authenticate",
+        }
+
+    return run_review(summary, installation_id, client=client)
 
 
 # ---------- FastAPI app, imported lazily so the core stays dependency-free ----------

@@ -13,9 +13,15 @@ dependencies = ["pyyaml"]
 [project.optional-dependencies]
 # Day 5: the reviewer agent. pydantic only at the LLM boundary, per CLAUDE.md.
 agent = ["anthropic", "pydantic"]
-# Day 5-8: webhook receiver for the GitHub App.
-server = ["fastapi", "uvicorn"]
-dev = ["pytest"]
+# Day 8: webhook receiver for the GitHub App. `cryptography` is the one thing the
+# App JWT cannot be hand-rolled without — RSA signing. Everything else in github.py
+# uses urllib and stdlib base64 rather than adding requests or PyJWT.
+server = ["fastapi", "uvicorn", "cryptography"]
+# `dev` carries the agent deps because the test suite imports them: test_day5 and
+# test_day6 exercise the Pydantic Finding schema and the agent's degradation paths with
+# an injected fake client. A bare `pip install -e ".[dev]"` that cannot collect the
+# suite makes the README's own test command fail, which is how this was found.
+dev = ["pytest", "anthropic", "pydantic"]
 
 [project.scripts]
 dbt-sentinel = "dbt_sentinel.cli:main"

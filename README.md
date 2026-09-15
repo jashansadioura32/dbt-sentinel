@@ -19,11 +19,22 @@ they are honest rather than flattering.
 ```bash
 git clone https://github.com/<you>/dbt-sentinel.git
 cd dbt-sentinel
-pip install -e .            # core + policy retrieval
-pip install -e ".[dev]"     # adds pytest
-pip install -e ".[agent]"   # adds the reviewer agent (anthropic, pydantic)
-pip install -e ".[server]"  # adds the webhook receiver (fastapi, uvicorn)
+
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+
+pip install -e ".[dev]"            # core, policy retrieval, and pytest
 ```
+
+Optional extras, added per feature:
+
+```bash
+pip install -e ".[agent]"          # the reviewer agent (anthropic, pydantic)
+pip install -e ".[server]"         # the webhook receiver (fastapi, uvicorn, cryptography)
+```
+
+Install `.[dev]` rather than bare `.` — the test command below needs pytest, and a plain
+`pip install -e .` leaves it missing.
 
 Only `pyyaml` is a runtime dependency: the policy pack is YAML, and retrieval is part of
 the deterministic path. Retrieval itself is stdlib-only, so the published eval numbers
