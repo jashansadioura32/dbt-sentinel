@@ -70,6 +70,24 @@ Day 6 is the first time real findings exist. Two consequences:
 - `DEFAULT_MODEL` is pinned to an exact id rather than an alias, so the day-6 numbers
   stay attributable to one model. Changing it invalidates the comparison.
 
+## Day 6 status: harness built, measurement outstanding
+
+`evals/compare.py` is written and tested, but **no live run has happened** — there is no
+`ANTHROPIC_API_KEY`, so the agent arm has never executed. Day 6 is formally incomplete:
+`RESULTS_V1.md` is deliberately unwritten rather than filled with placeholder numbers,
+and the runner exits 2 rather than emitting a results file with a fabricated agent arm.
+
+To finish day 6:
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+python -m evals.compare            # ~$0.30-1.00 for 30 fixtures on claude-sonnet-5
+```
+
+Then the numbers, the failure taxonomy and the top-3 failure modes go into
+`evals/RESULTS_V1.md`, and any label the agent proves wrong is argued in
+`evals/LABEL_CHANGES.md` — never silently relabelled.
+
 ## Considered and rejected for v1
 
 - Web UI / dashboard — a non-goal, not a deferral.
