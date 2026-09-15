@@ -1,0 +1,16 @@
+diff --git a/models/staging/stg_orders.sql b/models/staging/stg_orders.sql
+index 1111111..7777777 100644
+--- a/models/staging/stg_orders.sql
++++ b/models/staging/stg_orders.sql
+@@ -1,6 +1,8 @@
++-- Staging model for raw orders.
++-- Grain: one row per order.
+ with source as (
+     select * from {{ source('raw', 'orders') }}
+ )
+ select
+     id as order_id,
+     user_id as customer_id,
+     order_date as order_date,
+     status as status
+ from source

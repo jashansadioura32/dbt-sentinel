@@ -1,0 +1,30 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# dbt build output. target/manifest.json is the one exception — day 8 uses a committed
+# manifest as the fallback when no CI artifact is available, so it is force-added there.
+target/
+dbt_packages/
+logs/
+*.duckdb
+
+# Embedding cache for the day-4 policy pack; regenerated from policies/*.yml on demand.
+.sentinel_cache/
+
+.env
+.DS_Store
+.idea/
+.vscode/

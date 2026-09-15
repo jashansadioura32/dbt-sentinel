@@ -1,0 +1,44 @@
+diff --git a/models/staging/stg_orders.sql b/models/staging/stg_orders.sql
+index 1111111..2222222 100644
+--- a/models/staging/stg_orders.sql
++++ b/models/staging/stg_orders.sql
+@@ -1,10 +1,10 @@
+ with source as (
+     select * from {{ source('raw', 'orders') }}
+ )
+ select
+     id as order_id,
+-    user_id as customer_id,
++    user_id as cust_id,
+     order_date as order_date,
+     status as status
+ from source
+diff --git a/models/staging/schema.yml b/models/staging/schema.yml
+index 3333333..4444444 100644
+--- a/models/staging/schema.yml
++++ b/models/staging/schema.yml
+@@ -1,14 +1,14 @@
+ version: 2
+
+ models:
+   - name: stg_orders
+     description: One row per order.
+     columns:
+       - name: order_id
+         tests:
+           - unique
+           - not_null
+-      - name: customer_id
++      - name: cust_id
+         tests:
+           - not_null
+       - name: order_date
+diff --git a/macros/cents_to_dollars.sql b/macros/cents_to_dollars.sql
+index 5555555..6666666 100644
+--- a/macros/cents_to_dollars.sql
++++ b/macros/cents_to_dollars.sql
+@@ -1,3 +1,3 @@
+ {% macro cents_to_dollars(column_name) %}
+-    ({{ column_name }} / 100)::numeric(16, 2)
++    round(({{ column_name }} / 100)::numeric(16, 2), 2)
+ {% endmacro %}

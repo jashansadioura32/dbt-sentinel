@@ -1,0 +1,149 @@
+{
+  "metadata": {
+    "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
+    "dbt_version": "1.8.0",
+    "generated_at": "2026-01-15T10:00:00.000000Z",
+    "project_name": "jaffle"
+  },
+  "nodes": {
+    "model.jaffle.stg_orders": {
+      "name": "stg_orders",
+      "resource_type": "model",
+      "original_file_path": "models/staging/stg_orders.sql",
+      "patch_path": "jaffle://models/staging/schema.yml",
+      "config": { "materialized": "view" },
+      "contract": { "enforced": false },
+      "access": "protected",
+      "depends_on": { "nodes": ["source.jaffle.raw.orders"] },
+      "columns": { "order_id": {}, "customer_id": {}, "order_date": {}, "status": {} }
+    },
+    "model.jaffle.stg_customers": {
+      "name": "stg_customers",
+      "resource_type": "model",
+      "original_file_path": "models/staging/stg_customers.sql",
+      "patch_path": "jaffle://models/staging/schema.yml",
+      "config": { "materialized": "view" },
+      "contract": { "enforced": false },
+      "access": "protected",
+      "depends_on": { "nodes": ["source.jaffle.raw.customers"] },
+      "columns": { "customer_id": {}, "first_name": {}, "last_name": {} }
+    },
+    "model.jaffle.fct_orders": {
+      "name": "fct_orders",
+      "resource_type": "model",
+      "original_file_path": "models/marts/fct_orders.sql",
+      "patch_path": "jaffle://models/marts/schema.yml",
+      "config": { "materialized": "table" },
+      "contract": { "enforced": true },
+      "access": "public",
+      "depends_on": {
+        "nodes": ["model.jaffle.stg_orders", "model.jaffle.stg_customers"]
+      },
+      "columns": { "order_id": {}, "customer_id": {}, "amount": {} }
+    },
+    "model.jaffle.dim_customers": {
+      "name": "dim_customers",
+      "resource_type": "model",
+      "original_file_path": "models/marts/dim_customers.sql",
+      "patch_path": "jaffle://models/marts/schema.yml",
+      "config": { "materialized": "incremental" },
+      "contract": { "enforced": false },
+      "access": "protected",
+      "depends_on": {
+        "nodes": ["model.jaffle.stg_orders", "model.jaffle.stg_customers"]
+      },
+      "columns": { "customer_id": {}, "lifetime_value": {} }
+    },
+    "model.jaffle.rpt_revenue": {
+      "name": "rpt_revenue",
+      "resource_type": "model",
+      "original_file_path": "models/marts/rpt_revenue.sql",
+      "patch_path": "jaffle://models/marts/schema.yml",
+      "config": { "materialized": "table" },
+      "contract": { "enforced": false },
+      "access": "protected",
+      "depends_on": { "nodes": ["model.jaffle.fct_orders"] },
+      "columns": { "month": {}, "revenue": {} }
+    },
+    "test.jaffle.not_null_stg_orders_order_id.a1b2c3": {
+      "name": "not_null_stg_orders_order_id",
+      "resource_type": "test",
+      "original_file_path": "models/staging/schema.yml",
+      "config": { "materialized": "test" },
+      "depends_on": { "nodes": ["model.jaffle.stg_orders"] },
+      "columns": {}
+    },
+    "test.jaffle.unique_stg_orders_order_id.d4e5f6": {
+      "name": "unique_stg_orders_order_id",
+      "resource_type": "test",
+      "original_file_path": "models/staging/schema.yml",
+      "config": { "materialized": "test" },
+      "depends_on": { "nodes": ["model.jaffle.stg_orders"] },
+      "columns": {}
+    },
+    "test.jaffle.not_null_stg_orders_customer_id.g7h8i9": {
+      "name": "not_null_stg_orders_customer_id",
+      "resource_type": "test",
+      "original_file_path": "models/staging/schema.yml",
+      "config": { "materialized": "test" },
+      "depends_on": { "nodes": ["model.jaffle.stg_orders"] },
+      "columns": {}
+    }
+  },
+  "sources": {
+    "source.jaffle.raw.orders": {
+      "name": "orders",
+      "resource_type": "source",
+      "original_file_path": "models/staging/sources.yml",
+      "columns": { "id": {}, "user_id": {}, "order_date": {}, "status": {} }
+    },
+    "source.jaffle.raw.customers": {
+      "name": "customers",
+      "resource_type": "source",
+      "original_file_path": "models/staging/sources.yml",
+      "columns": { "id": {}, "first_name": {}, "last_name": {} }
+    }
+  },
+  "exposures": {
+    "exposure.jaffle.exec_dashboard": {
+      "name": "exec_dashboard",
+      "resource_type": "exposure",
+      "type": "dashboard",
+      "original_file_path": "models/exposures.yml",
+      "owner": { "name": "Analytics Team", "email": "analytics@example.com" },
+      "depends_on": { "nodes": ["model.jaffle.fct_orders"] }
+    }
+  },
+  "macros": {
+    "macro.jaffle.cents_to_dollars": {
+      "name": "cents_to_dollars",
+      "resource_type": "macro",
+      "original_file_path": "macros/cents_to_dollars.sql"
+    }
+  },
+  "child_map": {
+    "source.jaffle.raw.orders": ["model.jaffle.stg_orders"],
+    "source.jaffle.raw.customers": ["model.jaffle.stg_customers"],
+    "model.jaffle.stg_orders": [
+      "model.jaffle.fct_orders",
+      "model.jaffle.dim_customers",
+      "test.jaffle.not_null_stg_orders_order_id.a1b2c3",
+      "test.jaffle.unique_stg_orders_order_id.d4e5f6",
+      "test.jaffle.not_null_stg_orders_customer_id.g7h8i9"
+    ],
+    "model.jaffle.stg_customers": [
+      "model.jaffle.fct_orders",
+      "model.jaffle.dim_customers"
+    ],
+    "model.jaffle.fct_orders": [
+      "model.jaffle.rpt_revenue",
+      "exposure.jaffle.exec_dashboard"
+    ],
+    "model.jaffle.dim_customers": [],
+    "model.jaffle.rpt_revenue": [],
+    "exposure.jaffle.exec_dashboard": [],
+    "test.jaffle.not_null_stg_orders_order_id.a1b2c3": [],
+    "test.jaffle.unique_stg_orders_order_id.d4e5f6": [],
+    "test.jaffle.not_null_stg_orders_customer_id.g7h8i9": []
+  }
+}

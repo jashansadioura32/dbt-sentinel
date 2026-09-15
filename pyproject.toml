@@ -1,0 +1,30 @@
+[project]
+name = "dbt-sentinel"
+version = "0.2.0"
+description = "Blast-radius review for dbt pull requests"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+# Day 2 is deliberately dependency-free: the deterministic core needs nothing but the
+# stdlib. Extras below are added in the day they are first used, not up front.
+dependencies = []
+
+[project.optional-dependencies]
+# Day 4-5: policy pack, retrieval, and the reviewer agent.
+agent = ["anthropic", "pydantic", "pyyaml"]
+# Day 5-8: webhook receiver for the GitHub App.
+server = ["fastapi", "uvicorn"]
+dev = ["pytest"]
+
+[project.scripts]
+dbt-sentinel = "dbt_sentinel.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dbt_sentinel"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
