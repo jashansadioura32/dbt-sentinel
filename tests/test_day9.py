@@ -289,8 +289,15 @@ def test_exhausted_retries_surface_as_one_exception_type(monkeypatch):
 # ---------- quota exhaustion is permanent, not transient ----------
 
 
-def _quota_error(code: str = "insufficient_quota"):
-    """Mimics the OpenAI SDK's RateLimitError for an exhausted credit balance."""
+def _quota_error(code: str = "insufficient_quota", structured: bool = False):
+    """Mimics the OpenAI SDK's RateLimitError for an exhausted credit balance.
+
+    `structured=False` is the shape a real key with no credits actually produces, checked
+    against the live SDK: `body` IS a populated dict, but `error.code` and `error.type`
+    both come back None, with the code present only in the stringified message. An
+    earlier version of this helper set code/type itself and so only ever exercised the
+    structured branch -- it passed while the path that fires in production went untested.
+    """
 
     class RateLimitError(Exception):
         def __init__(self):
@@ -299,7 +306,11 @@ def _quota_error(code: str = "insufficient_quota"):
                 f"remaining.', 'type': '{code}', 'code': '{code}'}}}}"
             )
             self.status_code = 429
-            self.body = {"error": {"message": "no credits", "type": code, "code": code}}
+            if structured:
+                self.body = {"error": {"message": "no credits", "type": code, "code": code}}
+            else:
+                self.body = {"error": {"message": "You have no credits remaining.",
+                                       "type": None, "code": None}}
 
     return RateLimitError()
 
@@ -310,8 +321,11 @@ def test_exhausted_credits_is_not_retried():
     Found by smoke-testing a real key with no credits."""
     from dbt_sentinel.agent import _is_transient
 
+    # The real-world shape first: body populated, code/type None, code only in the text.
     assert _is_transient(_quota_error("insufficient_quota")) is False
     assert _is_transient(_quota_error("credit_balance_exhausted")) is False
+    # And the structured shape, in case a future SDK version populates the fields.
+    assert _is_transient(_quota_error("insufficient_quota", structured=True)) is False
 
 
 def test_a_real_rate_limit_is_still_retried():
