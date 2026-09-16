@@ -284,3 +284,91 @@ def test_exhausted_retries_surface_as_one_exception_type(monkeypatch):
     )
     with pytest.raises(GitHubError, match="attempts"):
         gh._request("GET", "https://api.github.com/x", "t")
+
+
+# ---------- quota exhaustion is permanent, not transient ----------
+
+
+def _quota_error(code: str = "insufficient_quota"):
+    """Mimics the OpenAI SDK's RateLimitError for an exhausted credit balance."""
+
+    class RateLimitError(Exception):
+        def __init__(self):
+            super().__init__(
+                f"Error code: 429 - {{'error': {{'message': 'You have no credits "
+                f"remaining.', 'type': '{code}', 'code': '{code}'}}}}"
+            )
+            self.status_code = 429
+            self.body = {"error": {"message": "no credits", "type": code, "code": code}}
+
+    return RateLimitError()
+
+
+def test_exhausted_credits_is_not_retried():
+    """A 429 for an exhausted balance is permanent until someone adds money. Retrying it
+    burns three attempts and a backoff per call across every fixture and still fails.
+    Found by smoke-testing a real key with no credits."""
+    from dbt_sentinel.agent import _is_transient
+
+    assert _is_transient(_quota_error("insufficient_quota")) is False
+    assert _is_transient(_quota_error("credit_balance_exhausted")) is False
+
+
+def test_a_real_rate_limit_is_still_retried():
+    """The fix must not make every 429 permanent -- a genuine rate limit does lift."""
+    from dbt_sentinel.agent import _is_transient
+
+    class RateLimitError(Exception):
+        def __init__(self):
+            super().__init__("Error code: 429 - rate limit exceeded, please slow down")
+            self.status_code = 429
+            self.body = {"error": {"message": "slow down", "type": "rate_limit_error"}}
+
+    assert _is_transient(RateLimitError()) is True
+
+
+def test_quota_detection_survives_a_missing_body():
+    """SDK versions differ in whether `body` is populated; the message is the fallback."""
+    from dbt_sentinel.agent import _is_transient
+
+    class RateLimitError(Exception):
+        def __init__(self):
+            super().__init__("Error code: 429 - insufficient_quota")
+            self.status_code = 429
+
+    assert _is_transient(RateLimitError()) is False
+
+
+def test_agent_degrades_immediately_on_exhausted_credits(tmp_path):
+    """One attempt, not three: the reader gets the reason without waiting out backoff."""
+    from dbt_sentinel.agent import ReviewerAgent
+    from dbt_sentinel.diff import resolve_changes
+    from dbt_sentinel.lineage import Lineage
+    from dbt_sentinel.report import build_assessments
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[1]
+    lineage = Lineage.from_path(repo / "evals" / "manifest" / "manifest.json")
+    diff = (repo / "evals" / "fixtures" / "b01_column_rename_with_consumers.diff").read_text(
+        encoding="utf-8"
+    )
+    changes, _ = resolve_changes(diff, lineage)
+    assessments = build_assessments(changes, lineage)
+
+    attempts = []
+
+    class Client:
+        def __init__(self):
+            self.chat = self
+            self.completions = self
+
+        def create(self, **kwargs):
+            attempts.append(1)
+            raise _quota_error()
+
+    result = ReviewerAgent(lineage, None, client=Client(), sleep=lambda _: None).review(
+        assessments
+    )
+    assert result.degraded
+    assert len(attempts) == 1, f"retried a permanent failure {len(attempts)} times"
+    assert "credits" in result.degradation_reason or "quota" in result.degradation_reason

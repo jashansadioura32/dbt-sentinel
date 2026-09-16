@@ -67,7 +67,29 @@ _TRANSIENT_EXCEPTIONS = frozenset(
 )
 
 
+# An exhausted credit balance arrives as a 429 with this code, indistinguishable by
+# status from a real rate limit. It is permanent until someone adds money, so retrying
+# it burns three attempts and a backoff per call and still fails. Found by a smoke test
+# against a key with no credits.
+_PERMANENT_429_CODES = frozenset({"insufficient_quota", "credit_balance_exhausted"})
+
+
+def _is_quota_exhausted(exc: Exception) -> bool:
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error") or {}
+        if isinstance(error, dict):
+            if str(error.get("code") or "") in _PERMANENT_429_CODES:
+                return True
+            if str(error.get("type") or "") in _PERMANENT_429_CODES:
+                return True
+    # Fall back to the message: SDK versions differ in whether `body` is populated.
+    return any(code in str(exc) for code in _PERMANENT_429_CODES)
+
+
 def _is_transient(exc: Exception) -> bool:
+    if _is_quota_exhausted(exc):
+        return False
     if type(exc).__name__ in _TRANSIENT_EXCEPTIONS:
         # APIStatusError covers every status; only 5xx and 429 are worth another attempt.
         status = getattr(exc, "status_code", None)
