@@ -227,6 +227,19 @@ before/after comparison. They are parked in [ROADMAP.md](ROADMAP.md).
 
 ---
 
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [docs/PRD.md](docs/PRD.md) | Problem, users, success metrics against actuals, what was cut and why |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Module map, data flow, and 4 ADRs with the rejected alternatives |
+| [docs/EVAL_REPORT.md](docs/EVAL_REPORT.md) | Methodology, metrics, failure taxonomy, limitations |
+| [docs/CASE_STUDY.md](docs/CASE_STUDY.md) | The build as a narrative: decisions, defects found, what I would redo |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | GitHub App setup, permissions, secrets, troubleshooting |
+| [ROADMAP.md](ROADMAP.md) | Out-of-scope parking lot and deferred fixes |
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
