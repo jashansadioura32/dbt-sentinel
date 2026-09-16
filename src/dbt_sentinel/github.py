@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import time
 import urllib.error
@@ -24,6 +25,10 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from .retry import DEFAULT_ATTEMPTS, RetryableError, parse_retry_after, with_retries
+
+logger = logging.getLogger("dbt_sentinel.github")
 
 API_ROOT = "https://api.github.com"
 USER_AGENT = "dbt-sentinel"
@@ -67,15 +72,30 @@ def build_app_jwt(app_id: str, private_key_pem: str, now: int | None = None) -> 
     return signing_input.decode("ascii") + "." + _b64url(signature)
 
 
-def _request(
-    method: str,
-    url: str,
-    token: str,
-    *,
-    body: dict | None = None,
-    accept: str = "application/vnd.github+json",
+def _rate_limit_wait(headers: Any) -> float | None:
+    """Seconds to wait, from `Retry-After` or from `X-RateLimit-Reset`.
+
+    GitHub uses both: secondary limits send `Retry-After`, primary limits send a reset
+    epoch. Reading only one means waiting a guessed interval while the API is stating
+    the real one.
+    """
+    if headers is None:
+        return None
+    explicit = parse_retry_after(headers.get("Retry-After"))
+    if explicit is not None:
+        return explicit
+    reset = headers.get("X-RateLimit-Reset")
+    if not reset:
+        return None
+    try:
+        return max(0.0, float(reset) - time.time())
+    except (TypeError, ValueError):
+        return None
+
+
+def _attempt(
+    method: str, url: str, token: str, data: bytes | None, accept: str
 ) -> Any:
-    data = json.dumps(body).encode() if body is not None else None
     request = urllib.request.Request(url, data=data, method=method)
     request.add_header("Authorization", f"Bearer {token}")
     request.add_header("Accept", accept)
@@ -89,13 +109,17 @@ def _request(
             payload = response.read()
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")[:400]
-        # 403 with a rate-limit header is a wait, not a permissions problem. Saying so
-        # here saves the reader from chasing App permissions for an hour.
-        if exc.code == 403 and "rate limit" in detail.lower():
-            raise GitHubError(
-                f"GitHub rate limit hit on {method} {url}. Wait for the window to reset "
-                f"or reduce delivery volume. Response: {detail}"
+        wait = _rate_limit_wait(getattr(exc, "headers", None))
+
+        # Retryable: the limit will lift, and 5xx is upstream being briefly broken.
+        if exc.code == 429 or (exc.code == 403 and "rate limit" in detail.lower()):
+            raise RetryableError(
+                f"GitHub rate limit on {method} {url}: {detail}", retry_after=wait
             ) from exc
+        if exc.code >= 500:
+            raise RetryableError(f"{exc.code} on {method} {url}: {detail}") from exc
+
+        # Not retryable: sending a 404 or 422 again does not make it a 200.
         if exc.code == 404:
             raise GitHubError(
                 f"404 on {method} {url}. Usually the App is not installed on this repo, "
@@ -103,11 +127,35 @@ def _request(
             ) from exc
         raise GitHubError(f"{exc.code} on {method} {url}: {detail}") from exc
     except urllib.error.URLError as exc:
-        raise GitHubError(f"network error on {method} {url}: {exc.reason}") from exc
+        raise RetryableError(f"network error on {method} {url}: {exc.reason}") from exc
 
     if accept != "application/vnd.github+json":
         return payload.decode("utf-8", "replace")
     return json.loads(payload) if payload else None
+
+
+def _request(
+    method: str,
+    url: str,
+    token: str,
+    *,
+    body: dict | None = None,
+    accept: str = "application/vnd.github+json",
+) -> Any:
+    data = json.dumps(body).encode() if body is not None else None
+
+    def _log_retry(attempt: int, delay: float, exc: Exception) -> None:
+        logger.warning(
+            "retrying %s %s in %.1fs (attempt %d): %s", method, url, delay, attempt, exc
+        )
+
+    try:
+        return with_retries(
+            lambda: _attempt(method, url, token, data, accept), on_retry=_log_retry
+        )
+    except RetryableError as exc:
+        # Retries exhausted. Surface as GitHubError so callers keep one exception type.
+        raise GitHubError(f"{exc} (after {DEFAULT_ATTEMPTS} attempts)") from exc
 
 
 @dataclass

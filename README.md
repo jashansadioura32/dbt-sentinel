@@ -1,18 +1,32 @@
 # dbt-sentinel
 
-An AI agent that reviews dbt pull requests: maps the diff to changed models, computes
-the downstream blast radius, and flags changes that will break something.
+An agent that reviews dbt pull requests. It maps the diff to changed models, computes the
+downstream blast radius by graph traversal, retrieves the governance rules that apply, and
+posts a structured review with severity, affected models, and a suggested fix.
 
-**Status: day 5 of a 2-week public build.** Deterministic core, policy retrieval and
-agent v0 work. Measured baselines are published in [evals/BASELINE.md](evals/BASELINE.md);
-they are honest rather than flattering.
+**Status: day 9 of a 2-week public build.** Measured baselines are published in
+[evals/BASELINE.md](evals/BASELINE.md) and they are mediocre and honest rather than
+impressive and unverifiable.
 
-## Non-goals
+---
 
-- Not a data catalog, not a lineage UI, not a test generator
-- Single warehouse (Snowflake-flavoured SQL assumptions), single repo
-- No web UI — it comments on PRs, that's the whole surface
-- No column-level lineage at v1 — model-level reach only
+## The problem
+
+A dbt project is a graph of SQL models. Renaming a column in a staging model is one line
+in a diff and can break twelve dashboards, because dbt does not rewrite references — the
+next run simply fails, or worse, succeeds with wrong numbers.
+
+A reviewer looking at that diff sees one line. They cannot see the twelve consumers
+without walking the DAG by hand, so in practice nobody does, and breaking changes ship.
+
+dbt-sentinel walks the DAG on every PR and says what the diff will reach.
+
+**Why this is not just a lint rule:** the hard part is not detecting a removed column, it
+is deciding whether removing it *matters*. That depends on who consumes it, whether a
+contract is enforced, and whether a `left join` becoming `inner join` changed the grain.
+The first two are graph questions. The third needs judgment.
+
+---
 
 ## Install
 
@@ -23,123 +37,196 @@ cd dbt-sentinel
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
-pip install -e ".[dev]"            # core, policy retrieval, and pytest
+pip install -e ".[dev]"            # core, policy retrieval, and the test suite
 ```
 
 Optional extras, added per feature:
 
 ```bash
 pip install -e ".[agent]"          # the reviewer agent (anthropic, pydantic)
-pip install -e ".[server]"         # the webhook receiver (fastapi, uvicorn, cryptography)
+pip install -e ".[server]"         # the GitHub App (fastapi, uvicorn, cryptography)
 ```
 
 Install `.[dev]` rather than bare `.` — the test command below needs pytest and the
-Pydantic schema the agent tests exercise, and a plain `pip install -e .` leaves them
-missing.
+Pydantic schema the agent tests exercise.
 
 **Windows:** clone to a short path such as `C:\src\dbt-sentinel`. Installing `anthropic`
-under a deeply nested directory can fail with `OSError: [Errno 2] No such file or
-directory` on one of its longer filenames — that is Windows' 260-character path limit,
-not a packaging fault. Either shorten the path or enable long paths:
+under a deeply nested directory can fail with `OSError: [Errno 2]` on one of its longer
+filenames — that is Windows' 260-character path limit, not a packaging fault. Shorten the
+path, or enable long paths:
 `reg add HKLM\SYSTEM\CurrentControlSet\Control\FileSystem /v LongPathsEnabled /t REG_DWORD /d 1 /f`
 
-Only `pyyaml` is a runtime dependency: the policy pack is YAML, and retrieval is part of
-the deterministic path. Retrieval itself is stdlib-only, so the published eval numbers
-reproduce offline with no API key.
+---
 
-## What works today
+## Run it
+
+You need a dbt `manifest.json` and a diff. The repo ships both, so this works immediately:
 
 ```bash
 python -m dbt_sentinel \
-  --manifest target/manifest.json \
-  --diff pr.diff \
-  --mermaid --explain --fail-on high
+  --manifest evals/manifest/manifest.json \
+  --diff evals/fixtures/b01_column_rename_with_consumers.diff \
+  --fail-on high
 ```
 
-Without an editable install, prefix with `PYTHONPATH=src`.
-
-**Deterministic core (day 2)**
-- Parses `manifest.json` (schema v7–v14) into a normalised node graph
-- Resolves changed files to nodes via both `original_file_path` and `patch_path`,
-  normalising separators so a Windows-compiled manifest still matches a git diff
-- Extracts added/removed columns, scoped to the correct model inside a shared schema.yml
-- Walks the DAG for blast radius, excluding test nodes and following exposures
-- Scores severity and renders Markdown + a Mermaid diagram
-- Exits non-zero at a severity threshold, so it works as a CI gate
-
-**Policy retrieval (day 4)** — `--explain`
-- 14 governance rules in [policies/](policies/), hybrid retrieval: a deterministic
-  prefilter on `applies_to`, then TF-IDF ranking of what survives
-- Only the rule pack is vectorised — never the manifest, graph or SQL
-- `--explain` shows what was retrieved, the score, and how many rules the prefilter
-  eliminated
-
-**Reviewer agent (day 5)** — `--agent`
-```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-python -m dbt_sentinel --manifest target/manifest.json --diff pr.diff --agent
 ```
-- Claude with tool-calling: `get_lineage`, `get_policies`, `get_columns`. Lookups are
-  tools, so the manifest is never pasted into a prompt
-- Returns schema-validated `Finding` objects; **the LLM never writes the comment**
-- Any failure — no key, timeout, rate limit, invalid schema twice, prose instead of a
-  tool call — degrades to deterministic-only with a visible note
+## Blast radius
 
-**Webhook skeleton (day 5, not yet wired)** — `dbt_sentinel/webhook.py`
-```bash
-export GITHUB_WEBHOOK_SECRET=...
-uvicorn dbt_sentinel.webhook:app --port 8000
-```
-Verifies `X-Hub-Signature-256` against the raw body in constant time, then logs the
-payload. It does not fetch diffs or post comments yet — day 8 wires that, and says so in
-its own response rather than returning a silent 200.
-
-## Layout
-
-```
-src/dbt_sentinel/
-  models.py     domain types (Node, ChangedFile, ChangedNode, BlastRadius)
-  lineage.py    manifest parsing, node graph, BFS blast radius
-  diff.py       unified diff parsing, file->node resolution, column extraction
-  report.py     severity scoring, Markdown + Mermaid rendering
-  cli.py        entrypoint with --fail-on exit codes
-tests/
-  test_day2.py  11 regression tests, one per bug found
-  manifest.json synthetic fixture
+### 🔴 `stg_orders` — HIGH · 7 downstream
+- Removed column(s) `customer_id` with 7 downstream node(s)
+- Reaches 1 contracted model(s): fct_order_payments
+- Reaches 3 exposure(s): customer_success_churn, finance_month_end, exec_dashboard
 ```
 
-## Design decisions worth defending
+Exit code is 1, so it works as a CI gate. On your own project, point `--manifest` at
+`target/manifest.json` after `dbt compile` and pipe in `git diff origin/main...HEAD`.
 
-**Lineage is graph traversal, not retrieval.** The manifest ships `child_map`. Embedding
-a dependency graph and asking a model to reason over it would be slower, costlier, and
-less correct than a BFS. The LLM's job (day 5) is judgment, not lookup.
+| Flag | Does |
+|---|---|
+| `--manifest PATH` | `target/manifest.json` (required) |
+| `--diff PATH` | unified diff, or `-` for stdin (required) |
+| `--fail-on {high,medium,low,never}` | exit 1 at or above this severity |
+| `--mermaid` | emit a blast-radius diagram per change |
+| `--explain` | show which policy rules were retrieved, with scores |
+| `--agent` | add LLM judgment findings (needs `ANTHROPIC_API_KEY`) |
+| `--changed-at ISO8601` | warn if the manifest predates the change |
+
+---
+
+## Architecture
+
+```
+GitHub webhook
+  ↓  signature verified against the raw body (HMAC-SHA256, constant time)
+diff parser          deterministic  — unified diff → changed files
+manifest loader      deterministic  — manifest.json → normalised node graph
+lineage traversal    deterministic  — BFS over child_map → blast radius
+policy retrieval     hybrid         — glob/config prefilter, then TF-IDF over 14 rules
+reviewer agent       Claude         — tool-calling, returns validated Findings
+deterministic render                — template code → PR comment + commit status
+```
+
+Four decisions that shape everything else:
+
+**Deterministic first.** If graph traversal or string parsing can answer it, they do. The
+manifest ships `child_map`; embedding a dependency graph and asking a model to traverse it
+would be slower, costlier and less correct than a BFS. The LLM is for judgment, not lookup.
 
 **Reach amplifies risk, it does not create it.** Nearly every staging model sits upstream
-of a dashboard. An agent that scores HIGH on that basis flags every PR and gets muted
-within a week. Severity is triggered by structural change — a removed column, a deletion,
-a rename — and reach decides how loud to be.
+of a dashboard. Severity is triggered by a *structural* change — a removed column, a
+deletion, a rename, a contract edit — and reach only decides how loud to be. An agent that
+flags every PR gets muted in a week.
 
-**Unresolvable files are surfaced, never dropped.** A changed macro or a model missing
-from a stale manifest is exactly where under-reporting is dangerous. They appear in the
-output as an explicit warning.
+**The LLM never writes the comment.** It returns schema-validated `Finding` objects;
+rendering is template code. Model-supplied text is flattened to one line and rejected if it
+contains backticks or pipes, so it cannot forge headings inside someone's PR.
 
-**Test nodes are excluded from traversal.** dbt tests are children of every model they
-cover, so counting them makes a well-tested model look like it has twelve consumers.
+**Degrade, don't crash.** No API key, a timeout, a rate limit, invalid schema twice, prose
+instead of a tool call — each degrades to deterministic-only output *with a visible note*.
+Transient failures (429, 5xx, connection errors) retry with bounded backoff first; a 404 or
+a 400 fails immediately, because sending it again will not make it a 200.
+
+---
+
+## Published results
+
+Full detail in [evals/BASELINE.md](evals/BASELINE.md). 30 labelled fixtures, 10 breaking /
+10 should-pass / 10 subtle, run against a real manifest compiled by dbt 1.12.4.
+
+**Deterministic core, no LLM:**
+
+| Metric | Value |
+|---|---|
+| Precision | 0.800 |
+| Recall | 0.533 |
+| False-positive rate (should-pass block) | 0.200 |
+| Fixtures silently dropped | 4 |
+
+**Policy retrieval, measured separately** so a retrieval miss is distinguishable from a
+reasoning error:
+
+| Metric | Value |
+|---|---|
+| Precision@3 | 0.708 |
+| Recall@3 | 0.630 |
+| Correct silence on no-rule fixtures | 0.455 |
+
+Recall of 0.533 at precision 0.800 is the honest shape of a structural-only scorer: when it
+fires it is usually right, and it misses more than half of what a reviewer should catch.
+Every miss lives in SQL semantics — join grain, an incremental predicate, a dropped
+`distinct` — that no amount of graph traversal reveals. That gap is the argument for the
+agent, and it was quantified *before* the agent existed so the comparison cannot be
+retrofitted.
+
+**The agent has not been measured yet.** It needs an API key, and the 30-fixture
+comparison has not run. There is no agent number in this README because there is no agent
+number.
+
+The labels were written from dbt semantics before the eval runner existed
+([evals/fixtures/README.md](evals/fixtures/README.md) explains why that ordering is the
+only thing making these figures worth publishing). Any label that changes is argued in
+[evals/LABEL_CHANGES.md](evals/LABEL_CHANGES.md), never silently edited.
+
+---
+
+## Tests and evals
+
+```bash
+python -m pytest tests/ -q          # 130 regression tests (1 skipped without cryptography)
+python -m evals.runner              # severity metrics → evals/results.json
+python -m evals.retrieval_eval      # retrieval precision@3 → evals/retrieval_results.json
+python -m evals.compare             # agent vs. baseline (needs ANTHROPIC_API_KEY)
+```
+
+Every test encodes a bug found during the build. The eval suite runs in CI as a regression
+gate: if a published metric drops below its recorded value, the build fails — so a change
+that quietly makes review quality worse cannot merge while this README still claims
+otherwise.
+
+---
+
+## Deploying as a GitHub App
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). It covers App creation, the four repository
+permissions needed, private-key handling on hosts that mangle multi-line secrets, and a
+troubleshooting table keyed by symptom. `Procfile` and `railway.json` are included.
+
+**Not yet deployed.** The wiring is built and tested against a fake GitHub client; no real
+PR has received a comment.
+
+---
 
 ## Known limitations
 
-| Limitation | Impact | Planned fix |
-|---|---|---|
-| SQL column extraction is regex, not a parser | Misses `select *`, macro-generated columns, CTE aliases | Out of scope for v1 (see ROADMAP.md) |
-| Macro changes don't resolve to models | Under-reports blast radius for macro edits | Warned, not resolved |
-| Column-level lineage not tracked | Reports model reach, not which downstream model uses the dropped column | Post-2-week |
-| Manifest assumed current | A stale manifest silently shrinks blast radius | Freshness check + warn (day 3) |
+Documented rather than hidden. The ones that look bad are the ones most worth stating.
 
-## Tests
+| Limitation | Impact |
+|---|---|
+| **4 fixtures resolve to zero nodes** | A `data_type` edit on a contracted model or an `owner:` edit on an exposure is silently dropped — no severity, no warning. Two are HIGH. Worst failure shape in the project. |
+| **Additive columns score as breaking** | Adding a column scores the same HIGH as renaming one, driving the 0.200 false-positive rate. The tool reacts to *a column set changed*, not *a column removed*. |
+| Column extraction is regex, not a parser | Misses `select *`, CTE aliases, macro-generated columns |
+| Lexical retrieval cannot match a paraphrase | A diff saying `* 1.1` never matches a rule whose vocabulary is `full_refresh` |
+| Macro changes don't resolve to models | Surfaced as a warning, not resolved |
+| Model-level lineage only | Reports that 12 models are downstream, not which of them select the dropped column |
+| Manifest assumed current | A stale manifest shrinks blast radius; `--changed-at` warns but cannot fix it |
+| CI artifact download unimplemented | Falls back to a committed manifest and says so in the comment |
 
-```bash
-python -m pytest tests/ -q
-```
+The first two are the top failure modes and are deliberately *not* fixed yet — day 6
+measures, day 7 fixes, and fixing them in the measuring session would destroy the
+before/after comparison. They are parked in [ROADMAP.md](ROADMAP.md).
 
-Every test in `test_day2.py` encodes a bug found during the build. Three were false
-positives that would have made the agent untrustworthy.
+---
+
+## Non-goals
+
+- No web UI. PR comments are the entire surface.
+- Not a data catalog, a lineage browser, or a test generator.
+- No column-level lineage at v1.
+- Single warehouse (Snowflake-flavoured SQL assumptions), single repo.
+- No agent framework that hides control flow.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).

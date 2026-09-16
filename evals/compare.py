@@ -44,22 +44,13 @@ MANIFEST = EVALS / "manifest" / "manifest.json"
 SEVERITY_ORDER = {"low": 0, "medium": 1, "high": 2}
 FLAG_THRESHOLD = "medium"
 
-# USD per million tokens for the pinned model (claude-sonnet-5). Hardcoded rather than
-# fetched so a published cost-per-PR figure is reproducible and attributable to one price
-# list. Verify against https://claude.com/pricing before quoting these anywhere.
-#
-# These were initially written as 3.00/15.00 — Sonnet 4.6's rates, carried over by
-# assumption. Sonnet 5 is 2.00/10.00, so every cost figure would have been ~50% too high.
-# A published cost number is only as good as its price constant, hence the test.
-PRICE_PER_MTOK_INPUT = 2.00
-PRICE_PER_MTOK_OUTPUT = 10.00
-
-
-def cost_usd(input_tokens: int, output_tokens: int) -> float:
-    return (
-        input_tokens / 1_000_000 * PRICE_PER_MTOK_INPUT
-        + output_tokens / 1_000_000 * PRICE_PER_MTOK_OUTPUT
-    )
+# Re-exported from the package so a cost in a PR comment and a cost in the eval report
+# are computed from one price list. See src/dbt_sentinel/pricing.py.
+from dbt_sentinel.pricing import (  # noqa: E402
+    PRICE_PER_MTOK_INPUT,
+    PRICE_PER_MTOK_OUTPUT,
+    cost_usd,
+)
 
 
 @dataclass

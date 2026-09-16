@@ -35,6 +35,7 @@ from .lineage import Lineage
 from .models import ChangedNode
 from .report import Assessment
 from .retrieval import PolicyPack, summarise_change
+from .retry import RetryableError, with_retries
 
 # Pinned rather than an alias: an alias silently changes the model under the eval
 # numbers, and day 6 compares against a fixed baseline.
@@ -44,6 +45,31 @@ DEFAULT_TIMEOUT_S = 60.0
 MAX_TOOL_ROUNDS = 6
 
 Severity = Literal["low", "medium", "high"]
+
+# Matched on class name rather than imported exception types: `anthropic` is an optional
+# dependency, so importing its exception classes here would make the module unimportable
+# for the CLI and eval paths that never call the API.
+_TRANSIENT_EXCEPTIONS = frozenset(
+    {
+        "RateLimitError",
+        "APITimeoutError",
+        "APIConnectionError",
+        "InternalServerError",
+        "APIStatusError",
+        "TimeoutError",
+        "ConnectionError",
+    }
+)
+
+
+def _is_transient(exc: Exception) -> bool:
+    if type(exc).__name__ in _TRANSIENT_EXCEPTIONS:
+        # APIStatusError covers every status; only 5xx and 429 are worth another attempt.
+        status = getattr(exc, "status_code", None)
+        if type(exc).__name__ == "APIStatusError" and status is not None:
+            return status == 429 or status >= 500
+        return True
+    return False
 
 
 # ---------- the LLM boundary: Pydantic here and nowhere else ----------
@@ -363,12 +389,15 @@ class ReviewerAgent:
         client: Any = None,
         model: str = DEFAULT_MODEL,
         timeout_s: float = DEFAULT_TIMEOUT_S,
+        sleep: Any = None,
     ):
         self._lineage = lineage
         self._pack = pack
         self._model = model
         self._timeout_s = timeout_s
         self._client = client  # injectable so tests never touch the network
+        # Injectable so a test exercising the retry path does not wait out real backoff.
+        self._sleep = sleep or time.sleep
 
     def _ensure_client(self) -> Any:
         if self._client is not None:
@@ -386,6 +415,31 @@ class ReviewerAgent:
             ) from exc
         self._client = anthropic.Anthropic(timeout=self._timeout_s)
         return self._client
+
+    def _create_with_retries(self, client: Any, messages: list[dict[str, Any]]) -> Any:
+        """One API call, retrying only transient failures.
+
+        A 429 or a 502 is worth another attempt — degrading the whole review because the
+        API was briefly busy wastes analysis that was already correct. An auth error or a
+        bad request is not retried: it will fail identically three times and only delay
+        the degradation notice the reader needs.
+        """
+
+        def attempt() -> Any:
+            try:
+                return client.messages.create(
+                    model=self._model,
+                    max_tokens=MAX_TOKENS,
+                    system=SYSTEM_PROMPT,
+                    tools=[*TOOL_SCHEMAS, SUBMIT_TOOL],
+                    messages=messages,
+                )
+            except Exception as exc:  # noqa: BLE001 - classified, then re-raised
+                if _is_transient(exc):
+                    raise RetryableError(f"{type(exc).__name__}: {exc}") from exc
+                raise
+
+        return with_retries(attempt, sleep=self._sleep)
 
     def review(self, assessments: list[Assessment]) -> AgentResult:
         """Never raises. Every failure path returns a degraded result with a reason."""
@@ -412,13 +466,7 @@ class ReviewerAgent:
         for round_index in range(MAX_TOOL_ROUNDS):
             result.rounds = round_index + 1
             try:
-                response = client.messages.create(
-                    model=self._model,
-                    max_tokens=MAX_TOKENS,
-                    system=SYSTEM_PROMPT,
-                    tools=[*TOOL_SCHEMAS, SUBMIT_TOOL],
-                    messages=messages,
-                )
+                response = self._create_with_retries(client, messages)
             except Exception as exc:  # noqa: BLE001 - timeouts, rate limits, 5xx
                 result.degraded = True
                 result.degradation_reason = f"{type(exc).__name__}: {exc}"

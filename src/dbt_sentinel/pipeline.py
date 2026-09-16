@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from .diff import resolve_changes
 from .github import GitHubClient, GitHubError, PullRequestRef
 from .lineage import Lineage, ManifestError
+from .pricing import cost_usd
 from .report import build_assessments, render_agent_findings, render_markdown
 
 # Identifies our own comment so re-reviews update in place. Invisible when rendered.
@@ -198,18 +199,9 @@ def review_pull_request(
 
 
 def _agent_cost(result) -> float:
-    """Priced from the same constants the eval harness publishes, so a cost quoted in a
-    PR comment and a cost quoted in the eval report cannot disagree."""
-    try:
-        import sys
-        from pathlib import Path
-
-        sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-        from evals.compare import cost_usd
-
-        return cost_usd(result.input_tokens, result.output_tokens)
-    except Exception:  # noqa: BLE001 - a missing eval package must not break a review
-        return 0.0
+    """Priced from `pricing.py`, which the eval harness also imports, so a cost quoted
+    in a PR comment and a cost quoted in the eval report cannot disagree."""
+    return cost_usd(result.input_tokens, result.output_tokens)
 
 
 def _footer(manifest_source: str, cost: float, latency: float, agent_ran: bool) -> str:

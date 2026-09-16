@@ -183,9 +183,15 @@ def test_invalid_schema_twice_degrades(lineage, pack, assessments):
 
 
 def test_api_exception_degrades_without_raising(lineage, pack, assessments):
-    """Rule 5: a timeout or rate limit must not take the review down."""
+    """Rule 5: a timeout or rate limit must not take the review down.
+
+    `sleep` is injected because a TimeoutError is transient and now gets retried — a
+    test that let the real backoff run would spend seconds proving nothing.
+    """
     client = FakeClient(TimeoutError("request timed out"))
-    result = ReviewerAgent(lineage, pack, client=client).review(assessments)
+    result = ReviewerAgent(lineage, pack, client=client, sleep=lambda _: None).review(
+        assessments
+    )
     assert result.degraded
     assert "TimeoutError" in result.degradation_reason
 

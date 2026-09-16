@@ -20,6 +20,7 @@ def _run_agent(assessments: list, lineage: Lineage, policy_dir: str | None) -> s
     load could silently disagree with it.
     """
     from .agent import ReviewerAgent
+    from .pricing import cost_usd
     from .report import render_agent_findings
     from .retrieval import PolicyPack
 
@@ -32,7 +33,18 @@ def _run_agent(assessments: list, lineage: Lineage, policy_dir: str | None) -> s
 
     # ReviewerAgent.review never raises; every failure path returns a degraded result
     # that the renderer states plainly.
-    return render_agent_findings(ReviewerAgent(lineage, pack).review(assessments))
+    result = ReviewerAgent(lineage, pack).review(assessments)
+    rendered = render_agent_findings(result)
+
+    # Same cost and latency the PR comment footer carries. A local run that cannot tell
+    # you what it spent makes the published per-PR figure unverifiable.
+    if result.input_tokens or result.output_tokens:
+        rendered += (
+            f"\n_agent: {result.input_tokens:,} in / {result.output_tokens:,} out · "
+            f"${cost_usd(result.input_tokens, result.output_tokens):.4f} · "
+            f"{result.latency_s:.1f}s · {result.rounds} round(s)_\n"
+        )
+    return rendered
 
 
 def _explain_retrieval(changes: list, policy_dir: str | None) -> str:
