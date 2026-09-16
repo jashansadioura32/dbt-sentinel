@@ -1,5 +1,7 @@
 # dbt-sentinel
 
+[![CI](https://github.com/jashansadioura32/dbt-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/jashansadioura32/dbt-sentinel/actions/workflows/ci.yml)
+
 An agent that reviews dbt pull requests. It maps the diff to changed models, computes the
 downstream blast radius by graph traversal, retrieves the governance rules that apply, and
 posts a structured review with severity, affected models, and a suggested fix.
@@ -31,7 +33,7 @@ The first two are graph questions. The third needs judgment.
 ## Install
 
 ```bash
-git clone https://github.com/<you>/dbt-sentinel.git
+git clone https://github.com/jashansadioura32/dbt-sentinel.git
 cd dbt-sentinel
 
 python -m venv .venv
