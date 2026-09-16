@@ -43,17 +43,17 @@ def _row(**kwargs) -> Comparison:
 
 
 def test_price_constants_match_the_pinned_model():
-    """claude-sonnet-5 is $2/$10 per MTok. Sonnet 4.6's $3/$15 is the easy wrong answer,
-    and using it inflates every published cost figure by ~50%."""
-    assert DEFAULT_MODEL == "claude-sonnet-5"
-    assert PRICE_PER_MTOK_INPUT == 2.00
+    """gpt-4o is $2.50/$10 per MTok. The pin moved from claude-sonnet-5 when the agent
+    was ported; a stale price constant silently misstates every published cost."""
+    assert DEFAULT_MODEL == "gpt-4o"
+    assert PRICE_PER_MTOK_INPUT == 2.50
     assert PRICE_PER_MTOK_OUTPUT == 10.00
 
 
 def test_cost_math_is_per_million_tokens():
-    assert cost_usd(1_000_000, 0) == pytest.approx(2.00)
+    assert cost_usd(1_000_000, 0) == pytest.approx(2.50)
     assert cost_usd(0, 1_000_000) == pytest.approx(10.00)
-    assert cost_usd(1_000_000, 1_000_000) == pytest.approx(12.00)
+    assert cost_usd(1_000_000, 1_000_000) == pytest.approx(12.50)
 
 
 def test_cost_of_a_realistic_fixture_is_cents_not_dollars():

@@ -158,7 +158,7 @@ def review_pull_request(
     cost = 0.0
     agent_ran = False
 
-    if use_agent and assessments and os.environ.get("ANTHROPIC_API_KEY"):
+    if use_agent and assessments and os.environ.get("OPENAI_API_KEY"):
         from .agent import ReviewerAgent
         from .retrieval import PolicyPack
 
@@ -175,7 +175,7 @@ def review_pull_request(
         body = body + "\n" + render_agent_findings(result)
     elif use_agent and assessments:
         warnings.append(
-            "Reviewer agent skipped: ANTHROPIC_API_KEY is not configured on the server. "
+            "Reviewer agent skipped: OPENAI_API_KEY is not configured on the server. "
             "Structural analysis above is unaffected."
         )
 

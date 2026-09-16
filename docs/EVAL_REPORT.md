@@ -106,7 +106,7 @@ shows 6 of 11 no-rule fixtures still draw a spurious rule.
 ## Results: the agent
 
 **Not measured.** The 30-fixture agent-vs-baseline comparison has never run: it needs an
-`ANTHROPIC_API_KEY` that was not available during the build.
+`OPENAI_API_KEY` that was not available during the build.
 
 This is a gap in the project, not an omission from this document. What exists:
 
@@ -121,8 +121,8 @@ passing tests are not evidence of good reviews and were never meant to be.
 To close the gap:
 
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-python -m evals.compare          # ~$0.30-1.00 for 30 fixtures on claude-sonnet-5
+export OPENAI_API_KEY="sk-proj-..."
+python -m evals.compare          # ~$0.30-1.00 for 30 fixtures on gpt-4o
 ```
 
 Cost per PR and comment latency are unmeasured for the same reason. The instrumentation
@@ -202,7 +202,9 @@ it. Recorded because the process is part of the result.
 
 **A cost constant that would have inflated every published figure by ~50%.** The harness
 was written with $3/$15 per MTok — Sonnet 4.6's rates, carried over by assumption. The
-pinned model is `claude-sonnet-5` at $2/$10. A test now pins the constants, and the summary
+pinned model at the time was `claude-sonnet-5` at $2/$10 (the agent was later ported to
+OpenAI, moving the pin to `gpt-4o` at $2.50/$10). A test now pins the constants to
+`DEFAULT_MODEL`, and the summary
 records the price list behind any cost it reports.
 
 **A retrieval noise defect, caught on the first measured run.** Precision@3 started at

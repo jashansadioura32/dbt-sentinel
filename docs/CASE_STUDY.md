@@ -7,7 +7,7 @@ published whatever they say, and the two worst failures are named before the suc
 | | |
 |---|---|
 | **Repo** | [github.com/&lt;you&gt;/dbt-sentinel](https://github.com/<you>/dbt-sentinel) |
-| **Stack** | Python 3.10+, one runtime dependency (`pyyaml`), Claude for judgment only |
+| **Stack** | Python 3.10+, one runtime dependency (`pyyaml`), an LLM (gpt-4o) for judgment only |
 | **Scale** | 12 modules, 130 tests, 30 labelled eval fixtures, 14 governance rules |
 | **Docs** | [PRD](PRD.md) · [Architecture + ADRs](ARCHITECTURE.md) · [Eval report](EVAL_REPORT.md) · [Deployment](DEPLOYMENT.md) |
 

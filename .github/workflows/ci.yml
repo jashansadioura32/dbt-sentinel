@@ -26,7 +26,7 @@ jobs:
     # metric drops, so a change that quietly makes review quality worse cannot merge
     # while the numbers in BASELINE.md still claim otherwise.
     #
-    # Deterministic arms only: no ANTHROPIC_API_KEY, so nothing here costs money or
+    # Deterministic arms only: no OPENAI_API_KEY, so nothing here costs money or
     # depends on model sampling. The agent comparison is run by hand (evals/compare.py).
     runs-on: ubuntu-latest
     steps:

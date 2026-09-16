@@ -33,8 +33,8 @@ from dbt_sentinel.retry import (
 def test_pricing_matches_the_pinned_model():
     from dbt_sentinel.agent import DEFAULT_MODEL
 
-    assert DEFAULT_MODEL == "claude-sonnet-5"
-    assert (PRICE_PER_MTOK_INPUT, PRICE_PER_MTOK_OUTPUT) == (2.00, 10.00)
+    assert DEFAULT_MODEL == "gpt-4o"
+    assert (PRICE_PER_MTOK_INPUT, PRICE_PER_MTOK_OUTPUT) == (2.50, 10.00)
 
 
 def test_eval_harness_and_package_share_one_price_list():
@@ -58,7 +58,7 @@ def test_pipeline_prices_without_importing_the_eval_harness():
 
 
 def test_cost_math_is_per_million_tokens():
-    assert cost_usd(1_000_000, 0) == pytest.approx(2.00)
+    assert cost_usd(1_000_000, 0) == pytest.approx(2.50)
     assert cost_usd(0, 1_000_000) == pytest.approx(10.00)
     assert cost_usd(0, 0) == 0.0
 

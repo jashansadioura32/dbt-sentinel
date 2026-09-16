@@ -113,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
         "--agent",
         action="store_true",
         help=(
-            "run the reviewer agent for judgment findings. Requires ANTHROPIC_API_KEY. "
+            "run the reviewer agent for judgment findings. Requires OPENAI_API_KEY. "
             "Falls back to deterministic-only output, with a note, on any failure."
         ),
     )

@@ -166,10 +166,10 @@ def test_diff_fetch_failure_still_produces_a_comment():
 
 
 def test_agent_skipped_without_a_key_is_disclosed(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     outcome = review_pull_request(FakeGitHub(), PR, use_agent=True)
     assert not outcome.agent_ran
-    assert any("ANTHROPIC_API_KEY" in w for w in outcome.warnings)
+    assert any("OPENAI_API_KEY" in w for w in outcome.warnings)
 
 
 # ---------- comment upsert ----------

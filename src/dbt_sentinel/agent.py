@@ -1,4 +1,4 @@
-"""Reviewer agent: Claude with tool-calling, returning validated structured findings.
+"""Reviewer agent: an LLM with tool-calling, returning validated structured findings.
 
 Three invariants, in priority order. They matter more than review quality today.
 
@@ -39,14 +39,19 @@ from .retry import RetryableError, with_retries
 
 # Pinned rather than an alias: an alias silently changes the model under the eval
 # numbers, and day 6 compares against a fixed baseline.
-DEFAULT_MODEL = "claude-sonnet-5"
+#
+# Provider note: this agent was originally written against the Anthropic Messages API and
+# was ported to OpenAI chat.completions at the user's request. CLAUDE.md lists `anthropic`
+# among the allowed dependencies and does not list `openai`, so this is a deliberate,
+# recorded deviation from the project's own constraint rather than an oversight.
+DEFAULT_MODEL = "gpt-4o"
 MAX_TOKENS = 2048
 DEFAULT_TIMEOUT_S = 60.0
 MAX_TOOL_ROUNDS = 6
 
 Severity = Literal["low", "medium", "high"]
 
-# Matched on class name rather than imported exception types: `anthropic` is an optional
+# Matched on class name rather than imported exception types: `openai` is an optional
 # dependency, so importing its exception classes here would make the module unimportable
 # for the CLI and eval paths that never call the API.
 _TRANSIENT_EXCEPTIONS = frozenset(
@@ -128,7 +133,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "by graph traversal over the manifest, not inferred. Use this instead of "
             "guessing what depends on a model."
         ),
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {
                 "model": {"type": "string", "description": "Model name, e.g. stg_orders"}
@@ -143,7 +148,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "Returns rule_id, severity, description and guidance. Cite rule_ids from here; "
             "do not invent them."
         ),
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {
                 "change_summary": {
@@ -160,13 +165,24 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "Declared columns and tests for a model, from the manifest. Use to check "
             "whether a column exists or is tested before asserting either."
         ),
-        "input_schema": {
+        "parameters": {
             "type": "object",
             "properties": {"model": {"type": "string"}},
             "required": ["model"],
         },
     },
 ]
+
+
+def _as_openai_tools(flat: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Wrap flat {name, description, parameters} dicts in OpenAI's function envelope.
+
+    The tool definitions are kept flat above because they are also the documentation of
+    what the agent can look up. Converting here keeps one provider-shaped concern in one
+    place instead of spreading `{"type": "function", "function": {...}}` through four
+    literals.
+    """
+    return [{"type": "function", "function": tool} for tool in flat]
 
 
 class ToolBox:
@@ -294,7 +310,7 @@ SUBMIT_TOOL: dict[str, Any] = {
         "Submit the final structured findings. Call exactly once. An empty list is valid "
         "when the PR is routine."
     ),
-    "input_schema": {
+    "parameters": {
         "type": "object",
         "properties": {
             "findings": {
@@ -378,6 +394,30 @@ def build_user_prompt(assessments: list[Assessment], pack: PolicyPack | None) ->
     )
 
 
+def _assistant_turn(message: Any, tool_calls: list[Any]) -> dict[str, Any]:
+    """Rebuild the assistant turn for the next request.
+
+    The API returns typed objects but expects plain dicts on the way back in, so the
+    tool_calls have to be reconstructed field by field. Echoing the response object
+    directly works until it does not, and the failure is a 400 mid-review.
+    """
+    return {
+        "role": "assistant",
+        "content": getattr(message, "content", None),
+        "tool_calls": [
+            {
+                "id": call.id,
+                "type": "function",
+                "function": {
+                    "name": call.function.name,
+                    "arguments": call.function.arguments,
+                },
+            }
+            for call in tool_calls
+        ],
+    }
+
+
 # ---------- the loop ----------
 
 
@@ -402,18 +442,18 @@ class ReviewerAgent:
     def _ensure_client(self) -> Any:
         if self._client is not None:
             return self._client
-        if not os.environ.get("ANTHROPIC_API_KEY"):
+        if not os.environ.get("OPENAI_API_KEY"):
             raise RuntimeError(
-                "ANTHROPIC_API_KEY is not set. Export it, or run without --agent for "
+                "OPENAI_API_KEY is not set. Export it, or run without --agent for "
                 "deterministic-only output."
             )
         try:
-            import anthropic
+            import openai
         except ImportError as exc:  # pragma: no cover - depends on install state
             raise RuntimeError(
-                "the anthropic package is not installed. Run: pip install -e '.[agent]'"
+                "the openai package is not installed. Run: pip install -e '.[agent]'"
             ) from exc
-        self._client = anthropic.Anthropic(timeout=self._timeout_s)
+        self._client = openai.OpenAI(timeout=self._timeout_s)
         return self._client
 
     def _create_with_retries(self, client: Any, messages: list[dict[str, Any]]) -> Any:
@@ -427,12 +467,13 @@ class ReviewerAgent:
 
         def attempt() -> Any:
             try:
-                return client.messages.create(
+                # OpenAI carries the system prompt as the first message rather than a
+                # top-level `system` parameter, and tools need the function envelope.
+                return client.chat.completions.create(
                     model=self._model,
                     max_tokens=MAX_TOKENS,
-                    system=SYSTEM_PROMPT,
-                    tools=[*TOOL_SCHEMAS, SUBMIT_TOOL],
-                    messages=messages,
+                    tools=_as_openai_tools([*TOOL_SCHEMAS, SUBMIT_TOOL]),
+                    messages=[{"role": "system", "content": SYSTEM_PROMPT}, *messages],
                 )
             except Exception as exc:  # noqa: BLE001 - classified, then re-raised
                 if _is_transient(exc):
@@ -475,17 +516,36 @@ class ReviewerAgent:
 
             usage = getattr(response, "usage", None)
             if usage is not None:
-                result.input_tokens += getattr(usage, "input_tokens", 0) or 0
-                result.output_tokens += getattr(usage, "output_tokens", 0) or 0
+                # OpenAI names these prompt_/completion_; the Anthropic names are kept as
+                # a fallback so an injected fake client using either shape still reports.
+                result.input_tokens += (
+                    getattr(usage, "prompt_tokens", None)
+                    or getattr(usage, "input_tokens", 0)
+                    or 0
+                )
+                result.output_tokens += (
+                    getattr(usage, "completion_tokens", None)
+                    or getattr(usage, "output_tokens", 0)
+                    or 0
+                )
 
-            blocks = list(getattr(response, "content", []) or [])
-            tool_uses = [b for b in blocks if getattr(b, "type", None) == "tool_use"]
+            choices = list(getattr(response, "choices", []) or [])
+            message = getattr(choices[0], "message", None) if choices else None
+            tool_calls = list(getattr(message, "tool_calls", None) or []) if message else []
 
-            submit = next((b for b in tool_uses if b.name == "submit_findings"), None)
+            submit = next(
+                (c for c in tool_calls if getattr(c.function, "name", "") == "submit_findings"),
+                None,
+            )
             if submit is not None:
+                # OpenAI delivers arguments as a JSON *string*, not a parsed object, so a
+                # malformed payload is a JSONDecodeError rather than a schema violation.
+                # Both mean "the model did not honour the contract", so both take the
+                # single-retry path rather than crashing the review.
                 try:
-                    parsed = FindingsResponse.model_validate(submit.input)
-                except ValidationError as exc:
+                    raw_args = json.loads(submit.function.arguments or "{}")
+                    parsed = FindingsResponse.model_validate(raw_args)
+                except (ValidationError, json.JSONDecodeError) as exc:
                     result.validation_errors.append(str(exc))
                     if retried:
                         # Rule 2: one retry, then degrade rather than loop on a model
@@ -497,21 +557,15 @@ class ReviewerAgent:
                         result.latency_s = time.monotonic() - started
                         return result
                     retried = True
-                    messages.append({"role": "assistant", "content": blocks})
+                    messages.append(_assistant_turn(message, tool_calls))
                     messages.append(
                         {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "tool_result",
-                                    "tool_use_id": submit.id,
-                                    "is_error": True,
-                                    "content": (
-                                        f"Schema validation failed: {exc}. "
-                                        f"Call submit_findings again with valid fields."
-                                    ),
-                                }
-                            ],
+                            "role": "tool",
+                            "tool_call_id": submit.id,
+                            "content": (
+                                f"Schema validation failed: {exc}. "
+                                f"Call submit_findings again with valid fields."
+                            ),
                         }
                     )
                     continue
@@ -520,7 +574,7 @@ class ReviewerAgent:
                 result.latency_s = time.monotonic() - started
                 return result
 
-            if not tool_uses:
+            if not tool_calls:
                 # No tool call and no submission: the model answered in prose, which we
                 # discard by design. Nothing to render.
                 result.degraded = True
@@ -530,22 +584,31 @@ class ReviewerAgent:
                 result.latency_s = time.monotonic() - started
                 return result
 
-            messages.append({"role": "assistant", "content": blocks})
-            tool_results = []
-            for block in tool_uses:
-                payload = dict(block.input or {})
-                changed = by_name.get(payload.get("model") or "") or next(
-                    iter(by_name.values()), None
-                )
-                output = toolbox.dispatch(block.name, payload, changed)
-                tool_results.append(
+            messages.append(_assistant_turn(message, tool_calls))
+            for call in tool_calls:
+                try:
+                    payload = json.loads(call.function.arguments or "{}")
+                except json.JSONDecodeError as exc:
+                    payload = {}
+                    tool_output: dict = {"error": f"unparseable arguments: {exc}"}
+                else:
+                    tool_output = None  # type: ignore[assignment]
+
+                if tool_output is None:
+                    changed = by_name.get(payload.get("model") or "") or next(
+                        iter(by_name.values()), None
+                    )
+                    tool_output = toolbox.dispatch(call.function.name, payload, changed)
+
+                # Each tool result is its own message with role "tool", unlike the
+                # Anthropic shape where they are content blocks in one user message.
+                messages.append(
                     {
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": json.dumps(output),
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "content": json.dumps(tool_output),
                     }
                 )
-            messages.append({"role": "user", "content": tool_results})
 
         result.degraded = True
         result.degradation_reason = (

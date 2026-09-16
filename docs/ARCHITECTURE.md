@@ -15,7 +15,7 @@ GitHub webhook  -->  signature verified (HMAC-SHA256, constant time, raw body)
     +--------------------+--------------------+
                          |  assessments + retrieved rules
     +--------------------+--------------------+
-    |  JUDGMENT -- Claude, tool-calling
+    |  JUDGMENT -- LLM (gpt-4o), tool-calling
     |  agent.py       tools: get_lineage, get_policies, get_columns
     |                 returns validated Finding objects, never prose
     +--------------------+--------------------+
@@ -38,7 +38,7 @@ boundary is enforced by types: the agent receives `Assessment` objects and retur
 | `diff.py` | Unified diff parsing, file-to-node resolution, column extraction | `lineage`, `models` |
 | `report.py` | Severity scoring, Markdown + Mermaid, finding rendering | `lineage`, `models` |
 | `retrieval.py` | Policy pack loading, prefilter, TF-IDF, disk cache | `models`, `pyyaml` |
-| `agent.py` | Claude tool-calling loop, schema validation, degradation | all above, `anthropic`, `pydantic` |
+| `agent.py` | LLM tool-calling loop, schema validation, degradation | all above, `openai`, `pydantic` |
 | `pipeline.py` | PR ref to posted review; shared by webhook and CLI | all above |
 | `github.py` | App JWT, installation token, diff/file reads, comment/status writes | `retry` |
 | `retry.py` | Bounded backoff for transient upstream failures | stdlib |

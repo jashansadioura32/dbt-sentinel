@@ -73,15 +73,15 @@ Day 6 is the first time real findings exist. Two consequences:
 ## Day 6 status: harness built, measurement outstanding
 
 `evals/compare.py` is written and tested, but **no live run has happened** — there is no
-`ANTHROPIC_API_KEY`, so the agent arm has never executed. Day 6 is formally incomplete:
+`OPENAI_API_KEY`, so the agent arm has never executed. Day 6 is formally incomplete:
 `RESULTS_V1.md` is deliberately unwritten rather than filled with placeholder numbers,
 and the runner exits 2 rather than emitting a results file with a fabricated agent arm.
 
 To finish day 6:
 
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-python -m evals.compare            # ~$0.30-1.00 for 30 fixtures on claude-sonnet-5
+export OPENAI_API_KEY="sk-proj-..."
+python -m evals.compare            # ~$0.30-1.00 for 30 fixtures on gpt-4o
 ```
 
 Then the numbers, the failure taxonomy and the top-3 failure modes go into

@@ -43,14 +43,14 @@ pip install -e ".[dev]"            # core, policy retrieval, and the test suite
 Optional extras, added per feature:
 
 ```bash
-pip install -e ".[agent]"          # the reviewer agent (anthropic, pydantic)
+pip install -e ".[agent]"          # the reviewer agent (openai, pydantic)
 pip install -e ".[server]"         # the GitHub App (fastapi, uvicorn, cryptography)
 ```
 
 Install `.[dev]` rather than bare `.` — the test command below needs pytest and the
 Pydantic schema the agent tests exercise.
 
-**Windows:** clone to a short path such as `C:\src\dbt-sentinel`. Installing `anthropic`
+**Windows:** clone to a short path such as `C:\src\dbt-sentinel`. Installing `openai`
 under a deeply nested directory can fail with `OSError: [Errno 2]` on one of its longer
 filenames — that is Windows' 260-character path limit, not a packaging fault. Shorten the
 path, or enable long paths:
@@ -88,7 +88,7 @@ Exit code is 1, so it works as a CI gate. On your own project, point `--manifest
 | `--fail-on {high,medium,low,never}` | exit 1 at or above this severity |
 | `--mermaid` | emit a blast-radius diagram per change |
 | `--explain` | show which policy rules were retrieved, with scores |
-| `--agent` | add LLM judgment findings (needs `ANTHROPIC_API_KEY`) |
+| `--agent` | add LLM judgment findings (needs `OPENAI_API_KEY`) |
 | `--changed-at ISO8601` | warn if the manifest predates the change |
 
 ---
@@ -102,7 +102,7 @@ diff parser          deterministic  — unified diff → changed files
 manifest loader      deterministic  — manifest.json → normalised node graph
 lineage traversal    deterministic  — BFS over child_map → blast radius
 policy retrieval     hybrid         — glob/config prefilter, then TF-IDF over 14 rules
-reviewer agent       Claude         — tool-calling, returns validated Findings
+reviewer agent       gpt-4o         — tool-calling, returns validated Findings
 deterministic render                — template code → PR comment + commit status
 ```
 
@@ -175,7 +175,7 @@ only thing making these figures worth publishing). Any label that changes is arg
 python -m pytest tests/ -q          # 130 regression tests (1 skipped without cryptography)
 python -m evals.runner              # severity metrics → evals/results.json
 python -m evals.retrieval_eval      # retrieval precision@3 → evals/retrieval_results.json
-python -m evals.compare             # agent vs. baseline (needs ANTHROPIC_API_KEY)
+python -m evals.compare             # agent vs. baseline (needs OPENAI_API_KEY)
 ```
 
 Every test encodes a bug found during the build. The eval suite runs in CI as a regression

@@ -12,7 +12,10 @@ dependencies = ["pyyaml"]
 
 [project.optional-dependencies]
 # Day 5: the reviewer agent. pydantic only at the LLM boundary, per CLAUDE.md.
-agent = ["anthropic", "pydantic"]
+# `openai` replaces `anthropic` after the agent was ported at the user's request.
+# CLAUDE.md's allowed list names `anthropic` and not `openai`, so this is a recorded
+# deviation from the project's own dependency constraint, not an oversight.
+agent = ["openai", "pydantic"]
 # Day 8: webhook receiver for the GitHub App. `cryptography` is the one thing the
 # App JWT cannot be hand-rolled without — RSA signing. Everything else in github.py
 # uses urllib and stdlib base64 rather than adding requests or PyJWT.
@@ -21,7 +24,7 @@ server = ["fastapi", "uvicorn", "cryptography"]
 # test_day6 exercise the Pydantic Finding schema and the agent's degradation paths with
 # an injected fake client. A bare `pip install -e ".[dev]"` that cannot collect the
 # suite makes the README's own test command fail, which is how this was found.
-dev = ["pytest", "anthropic", "pydantic"]
+dev = ["pytest", "openai", "pydantic"]
 
 [project.scripts]
 dbt-sentinel = "dbt_sentinel.cli:main"

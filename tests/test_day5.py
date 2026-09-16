@@ -58,33 +58,58 @@ def assessments(lineage: Lineage):
 # ---------- fake client ----------
 
 
-class _Block:
-    def __init__(self, type_: str, name: str = "", input_: dict | None = None, id_: str = "t1"):
-        self.type = type_
+class _Function:
+    def __init__(self, name: str, arguments: str):
         self.name = name
-        self.input = input_ or {}
+        self.arguments = arguments
+
+
+class _ToolCall:
+    """Mirrors the OpenAI shape: arguments are a JSON *string*, not a parsed object."""
+
+    def __init__(self, name: str, arguments: dict | str, id_: str = "call_1"):
         self.id = id_
+        self.type = "function"
+        self.function = _Function(
+            name, arguments if isinstance(arguments, str) else json.dumps(arguments)
+        )
+
+
+class _Message:
+    def __init__(self, content: str | None = None, tool_calls: list[_ToolCall] | None = None):
+        self.content = content
+        self.tool_calls = tool_calls or None
+
+
+class _Choice:
+    def __init__(self, message: _Message):
+        self.message = message
+        self.finish_reason = "tool_calls" if message.tool_calls else "stop"
 
 
 class _Usage:
-    def __init__(self, input_tokens: int = 10, output_tokens: int = 20):
-        self.input_tokens = input_tokens
-        self.output_tokens = output_tokens
+    def __init__(self, prompt_tokens: int = 10, completion_tokens: int = 20):
+        self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
 
 
 class _Response:
-    def __init__(self, content: list[_Block]):
-        self.content = content
+    def __init__(self, message: _Message):
+        self.choices = [_Choice(message)]
         self.usage = _Usage()
 
 
 class FakeClient:
-    """Replays a scripted list of responses; records the requests it received."""
+    """Replays scripted responses; records the requests it received.
+
+    Shaped as `client.chat.completions.create(...)` to match the ported agent.
+    """
 
     def __init__(self, responses: list[_Response] | Exception):
         self._responses = responses
         self.requests: list[dict] = []
-        self.messages = self  # client.messages.create(...)
+        self.chat = self
+        self.completions = self
 
     def create(self, **kwargs):
         self.requests.append(kwargs)
@@ -96,7 +121,15 @@ class FakeClient:
 
 
 def _submit(findings: list[dict]) -> _Response:
-    return _Response([_Block("tool_use", "submit_findings", {"findings": findings})])
+    return _Response(_Message(tool_calls=[_ToolCall("submit_findings", {"findings": findings})]))
+
+
+def _tool_call(name: str, args: dict) -> _Response:
+    return _Response(_Message(tool_calls=[_ToolCall(name, args)]))
+
+
+def _prose(text: str = "I think this looks fine.") -> _Response:
+    return _Response(_Message(content=text))
 
 
 VALID_FINDING = {
@@ -123,7 +156,7 @@ def test_valid_findings_are_returned_structured(lineage, pack, assessments):
 def test_prose_without_tool_call_degrades(lineage, pack, assessments):
     """The model answering in Markdown is a degradation, not a result. Its text is
     discarded by design, so there is nothing to render."""
-    prose = _Response([_Block("text")])
+    prose = _prose()
     agent = ReviewerAgent(lineage, pack, client=FakeClient([prose]))
     result = agent.review(assessments)
     assert result.degraded
@@ -197,16 +230,16 @@ def test_api_exception_degrades_without_raising(lineage, pack, assessments):
 
 
 def test_missing_api_key_degrades_with_actionable_message(lineage, pack, assessments, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     result = ReviewerAgent(lineage, pack, client=None).review(assessments)
     assert result.degraded
-    assert "ANTHROPIC_API_KEY" in result.degradation_reason
+    assert "OPENAI_API_KEY" in result.degradation_reason
     assert "--agent" in result.degradation_reason  # says what to do instead
 
 
 def test_tool_loop_that_never_submits_degrades(lineage, pack, assessments):
     """A model that keeps calling tools forever must hit a ceiling, not spin."""
-    tool_call = _Response([_Block("tool_use", "get_lineage", {"model": "stg_orders"})])
+    tool_call = _tool_call("get_lineage", {"model": "stg_orders"})
     client = FakeClient([tool_call] * 10)
     result = ReviewerAgent(lineage, pack, client=client).review(assessments)
     assert result.degraded

@@ -348,9 +348,9 @@ def main(argv: list[str] | None = None) -> int:
     if live:
         import os
 
-        if not os.environ.get("ANTHROPIC_API_KEY"):
+        if not os.environ.get("OPENAI_API_KEY"):
             print(
-                "error: ANTHROPIC_API_KEY is not set, so the agent arm cannot run.\n"
+                "error: OPENAI_API_KEY is not set, so the agent arm cannot run.\n"
                 "       Export it, or pass --dry-run to score the baseline arm only.\n"
                 "       Refusing to write results with a fabricated agent arm.",
                 file=sys.stderr,

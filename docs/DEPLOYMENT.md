@@ -39,7 +39,7 @@ App settings → Install App → pick the repo. Note the **installation ID** fro
 | `GITHUB_APP_ID` | the App ID |
 | `GITHUB_WEBHOOK_SECRET` | the secret from step 1 |
 | `GITHUB_PRIVATE_KEY` | contents of the `.pem` |
-| `ANTHROPIC_API_KEY` | optional; without it reviews are deterministic-only and say so |
+| `OPENAI_API_KEY` | optional; without it reviews are deterministic-only and say so |
 
 Most hosts mangle multi-line secrets. Two supported workarounds:
 
@@ -127,4 +127,4 @@ deleted model's blast radius is computed against a graph the deletion already le
 | Comment posted, no status | Commit statuses permission missing |
 | `cryptography` ImportError | `pip install -e ".[server]"` |
 | Review says "no manifest found" | No `target/manifest.json` on the base branch |
-| Comment says agent skipped | `ANTHROPIC_API_KEY` not set on the server (reviews still work) |
+| Comment says agent skipped | `OPENAI_API_KEY` not set on the server (reviews still work) |

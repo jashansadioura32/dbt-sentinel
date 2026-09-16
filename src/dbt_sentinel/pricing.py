@@ -1,4 +1,4 @@
-"""Token pricing for the pinned model.
+"""Token pricing for the pinned model (gpt-4o).
 
 Lives in the package rather than the eval harness because both a PR comment and the eval
 report quote costs, and they must not be able to disagree. The earlier arrangement had
@@ -6,17 +6,21 @@ report quote costs, and they must not be able to disagree. The earlier arrangeme
 reaching into its own test harness, which works in a checkout and breaks the moment the
 package is installed somewhere without one.
 
-Verify against https://claude.com/pricing before quoting these anywhere.
+Verify against https://openai.com/api/pricing before quoting these anywhere.
 """
 
 from __future__ import annotations
 
-# USD per million tokens for claude-sonnet-5.
+# USD per million tokens for gpt-4o.
 #
-# Originally written as 3.00/15.00 — Sonnet 4.6's rates, carried over by assumption.
-# Sonnet 5 is 2.00/10.00, so every published cost figure would have been ~50% too high.
-# A published cost number is only as good as its price constant, hence the test.
-PRICE_PER_MTOK_INPUT = 2.00
+# History worth keeping: this was first written as 3.00/15.00 (Sonnet 4.6's rates, carried
+# over by assumption) while the pin was claude-sonnet-5 at 2.00/10.00 — every published
+# cost figure would have been ~50% too high. The agent was later ported to OpenAI, moving
+# the pin to gpt-4o at 2.50/10.00. A published cost number is only as good as its price
+# constant, which is why a test pins these to the model in DEFAULT_MODEL.
+#
+# Verify against https://openai.com/api/pricing before quoting these anywhere.
+PRICE_PER_MTOK_INPUT = 2.50
 PRICE_PER_MTOK_OUTPUT = 10.00
 
 
