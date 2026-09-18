@@ -13,11 +13,12 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from .diff import resolve_changes
+from .checks import run_checks
+from .diff import parse_diff, resolve_changes
 from .github import GitHubClient, GitHubError, PullRequestRef
 from .lineage import Lineage, ManifestError
 from .pricing import cost_usd
-from .report import build_assessments, render_agent_findings, render_markdown
+from .report import build_assessments, render_agent_findings, render_checks, render_markdown
 
 # Identifies our own comment so re-reviews update in place. Invisible when rendered.
 COMMENT_MARKER = "<!-- dbt-sentinel:review -->"
@@ -180,6 +181,15 @@ def review_pull_request(
         warnings.append(staleness)
 
     body = render_markdown(assessments, unresolved)
+
+    # Deterministic checks render as a peer of the blast radius, never folded into it:
+    # a lint finding has no reach, so it must not be amplified by one (design rule 2).
+    # Note what is NOT touched below — `severity` still comes only from assessments, so
+    # a check can never change the commit status.
+    check_findings = run_checks(parse_diff(diff_text), changes, lineage)
+    if section := render_checks(check_findings):
+        body = body + "\n" + section
+
     cost = 0.0
     agent_ran = False
 

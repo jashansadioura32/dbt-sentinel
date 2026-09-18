@@ -18,9 +18,10 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .diff import resolve_changes
+from .checks import run_checks
+from .diff import parse_diff, resolve_changes
 from .lineage import Lineage, ManifestError
-from .report import build_assessments, render_markdown, render_mermaid
+from .report import build_assessments, render_checks, render_markdown, render_mermaid
 
 
 def _run_agent(assessments: list, lineage: Lineage, policy_dir: str | None) -> str:
@@ -112,6 +113,11 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--no-checks",
+        action="store_true",
+        help="skip the deterministic check layer (schema entries, hardcoded relations, ...)",
+    )
+    parser.add_argument(
         "--explain",
         action="store_true",
         help="show which policy rules were retrieved per change, with scores",
@@ -174,6 +180,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"> ⚠️ **Stale manifest.** {staleness}\n")
 
     print(render_markdown(assessments, unresolved))
+
+    if not args.no_checks:
+        # Its own section, never folded into severity above: a lint finding has no reach.
+        if section := render_checks(run_checks(parse_diff(diff_text), changes, lineage)):
+            print()
+            print(section)
 
     if args.mermaid:
         for a in assessments:

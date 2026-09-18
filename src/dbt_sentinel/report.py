@@ -139,6 +139,37 @@ def _flatten(text: str, limit: int = 600) -> str:
     return collapsed[:limit].rstrip() + ("…" if len(collapsed) > limit else "")
 
 
+def render_checks(findings: list) -> str:
+    """Render deterministic check findings in their own section.
+
+    Separate from the blast radius on purpose: a lint finding has no reach, so it neither
+    amplifies with downstream count nor belongs on a scale that does. Returns "" when
+    there is nothing to say — a "no findings" block on every PR is noise, and the whole
+    argument for this tool is that it stays quiet when it should.
+    """
+    if not findings:
+        return ""
+
+    icons = {"medium": "🟠", "low": "🟢"}
+    lines = ["## Checks", ""]
+    for finding in findings:
+        icon = icons.get(finding.severity, "⚪")
+        lines.append(
+            f"### {icon} `{finding.path}` — {finding.severity.upper()} "
+            f"· `{finding.check_id}`"
+        )
+        lines.append(f"- {finding.message}")
+        lines.append(f"- **Fix:** {finding.suggestion}")
+        lines.append("")
+
+    lines.append(
+        "_Checks are advisory and do not affect the merge status — only the blast radius "
+        "above does._"
+    )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def render_agent_findings(result) -> str:
     """Render `AgentResult` deterministically. The LLM never writes this comment.
 

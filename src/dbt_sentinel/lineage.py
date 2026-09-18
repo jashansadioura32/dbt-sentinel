@@ -162,6 +162,10 @@ class Lineage:
     def get(self, unique_id: str) -> Node | None:
         return self._nodes.get(unique_id)
 
+    def all_nodes(self) -> list[Node]:
+        """Every node in the graph. For callers that need a name or path index."""
+        return list(self._nodes.values())
+
     def nodes_by_file_path(self, file_path: str) -> list[Node]:
         """Map a repo-relative file path to every node it defines or documents.
 
