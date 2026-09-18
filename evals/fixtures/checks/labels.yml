@@ -1,0 +1,79 @@
+# Ground-truth labels for the check-layer fixtures.
+#
+# READ THIS BEFORE CHANGING A LABEL.
+#
+# Written from docs/CHECKS.md BEFORE src/dbt_sentinel/checks.py existed, the same ordering
+# that makes ../labels.yml worth publishing. If a label is edited to match what the
+# implementation happens to emit, the eval becomes a mirror and the published precision
+# means nothing.
+#
+# Each check has exactly two fixtures:
+#   cNN   true positive — the check must fire
+#   cNNn  near miss     — the idiomatic twin that must stay silent
+#
+# The near misses are the point. A check that fires on the true positive is easy; the
+# published false-positive rate is decided entirely by the `n` fixtures, which are written
+# to look as much like the violation as dbt allows. Same discipline as b01/p10 in the
+# severity suite: two fixtures that look alike and mean the opposite.
+#
+# `expected_check_ids: []` means the file must produce NO check finding at all. It is not
+# "we did not check" — it is an assertion of silence.
+
+fixtures:
+  - id: c01_new_model_no_yaml
+    expected_check_ids: [missing-schema-entry]
+    rationale: >
+      A new staging model is added with no entry in any schema.yml. Nothing documents its
+      columns and no test can be attached to it, so it enters the project untested and
+      undescribed. dbt will build it happily, which is why this is worth saying out loud.
+
+  - id: c01n_new_model_with_yaml
+    expected_check_ids: []
+    rationale: >
+      The same new model, with its schema.yml entry added in the same PR. This is the
+      correct way to add a model and must stay silent. It is the near miss because the
+      .sql half of the diff is byte-identical to c01 — only the second file differs, so a
+      check that looks at the new model in isolation fails here.
+
+  - id: c02_deprecated_tests_key
+    expected_check_ids: [deprecated-tests-key]
+    rationale: >
+      `tests:` was renamed to `data_tests:` in dbt 1.8. The old key still works but is
+      deprecated, so this is a factual upgrade-path finding with no judgment in it —
+      which is why it is severity low rather than medium.
+
+  - id: c02n_data_tests_key
+    expected_check_ids: []
+    rationale: >
+      The same two tests under the current `data_tests:` key. Near miss by one word.
+
+  - id: c03_hardcoded_relation
+    expected_check_ids: [hardcoded-relation]
+    rationale: >
+      A fully-qualified `analytics_prod.finance.exchange_rates` bypasses ref()/source(),
+      so dbt cannot see the dependency. The model is missing from the DAG, it will not be
+      rebuilt when its upstream changes, and it hardcodes a production database name into
+      SQL that is supposed to run in dev too. This defeats lineage itself, which is the
+      entire subject of this tool.
+
+  - id: c03n_source_macro
+    expected_check_ids: []
+    rationale: >
+      The same table reached through `{{ source('finance', 'exchange_rates') }}`. The
+      rendered SQL is identical; only the Jinja differs. A check matching a dotted
+      identifier without excluding Jinja expressions fires here and is wrong.
+
+  - id: c04_staging_refs_mart
+    expected_check_ids: [cross-layer-reference]
+    rationale: >
+      A staging model refs a mart, inverting the intended direction of the DAG. Staging is
+      meant to be a thin, source-shaped layer that everything downstream builds on;
+      pointing it at a mart creates a cycle in the layering (not in the DAG itself, which
+      dbt would reject) and means a change to the mart now silently alters staging.
+
+  - id: c04n_mart_refs_staging
+    expected_check_ids: []
+    rationale: >
+      The same ref() written the correct way round — a mart consuming staging. This is the
+      normal shape of every dbt project and must stay silent. Near miss because the added
+      line is near-identical; only the direction differs.

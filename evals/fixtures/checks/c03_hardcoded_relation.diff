@@ -1,0 +1,12 @@
+diff --git a/models/marts/fct_order_payments.sql b/models/marts/fct_order_payments.sql
+index 1111111..2222222 100644
+--- a/models/marts/fct_order_payments.sql
++++ b/models/marts/fct_order_payments.sql
+@@ -8,6 +8,7 @@ with payments as (
+ 
+ )
+ 
++select * from analytics_prod.finance.exchange_rates
+ select
+     order_id,
+     amount

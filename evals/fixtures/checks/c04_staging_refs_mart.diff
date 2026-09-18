@@ -1,0 +1,11 @@
+diff --git a/models/staging/stg_orders.sql b/models/staging/stg_orders.sql
+index 1111111..2222222 100644
+--- a/models/staging/stg_orders.sql
++++ b/models/staging/stg_orders.sql
+@@ -12,6 +12,7 @@ renamed as (
+         status as order_status,
+         order_date
+     from source
++    inner join {{ ref('fct_order_payments') }} using (order_id)
+ 
+ )

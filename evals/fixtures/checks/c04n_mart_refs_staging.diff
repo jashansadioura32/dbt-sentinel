@@ -1,0 +1,11 @@
+diff --git a/models/marts/rpt_customer_revenue.sql b/models/marts/rpt_customer_revenue.sql
+index 1111111..2222222 100644
+--- a/models/marts/rpt_customer_revenue.sql
++++ b/models/marts/rpt_customer_revenue.sql
+@@ -12,6 +12,7 @@ revenue as (
+         customer_id,
+         sum(amount) as total_revenue
+     from source
++    inner join {{ ref('stg_orders') }} using (order_id)
+ 
+ )

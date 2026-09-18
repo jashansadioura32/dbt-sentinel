@@ -1,0 +1,16 @@
+diff --git a/models/staging/stg_shipments.sql b/models/staging/stg_shipments.sql
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/models/staging/stg_shipments.sql
+@@ -0,0 +1,9 @@
++with source as (
++
++    select * from {{ ref('raw_shipments') }}
++
++)
++
++select
++    id as shipment_id,
++    order_id
++from source

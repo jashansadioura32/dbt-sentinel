@@ -88,6 +88,38 @@ Then the numbers, the failure taxonomy and the top-3 failure modes go into
 `evals/RESULTS_V1.md`, and any label the agent proves wrong is argued in
 `evals/LABEL_CHANGES.md` — never silently relabelled.
 
+## Deferred from the check layer, each with its precondition
+
+Taken from an external dbt code reviewer and deliberately not built. Each entry names the
+condition that would make it necessary, so the decision can be revisited on evidence
+rather than on taste.
+
+- **Hunk-offset parsing and inline review comments.** `diff.py` matches `@@` and discards
+  the offsets, so nothing in the codebase knows a line number. Parsing them is ~60 lines;
+  the reason to wait is what they unlock. Inline comments need
+  `POST /pulls/{n}/reviews`, and GitHub **422s the entire review** if one position is not
+  part of the diff — a position bug drops everything instead of degrading, which collides
+  with design rules 4 and 5. Precondition: a fallback path to an issue comment plus a
+  position validator, before the first inline comment is ever posted. It is also the only
+  change that would edit `parse_diff`, which feeds both published eval baselines.
+
+- **Grandfather baseline for brownfield adoption.** A frozen list of pre-existing
+  violations that downgrade to WARN with a `[GRANDFATHERED]` prefix, plus a
+  `--validate-grandfather` mode to find entries whose file no longer violates. Not needed
+  here: checks read only added diff lines, so pre-existing violations never fire.
+  **Precondition: the moment any check gains whole-file scanning.** Building the exemption
+  machinery before the problem exists would also put a suppression mechanism next to
+  `evals/`, which weakens the claim that the published numbers are unsuppressed.
+
+- **Scoped ignore file.** A `.sentinel_ignore` restricted to named check categories, so it
+  cannot be used to switch off the structural analysis. Nothing to ignore at four checks —
+  and a check that needs an escape hatch is a check that should be dropped instead.
+  Precondition: roughly 15 checks, or the first check that legitimately needs a per-repo
+  exemption.
+
+- **`--category` / `--check` CLI filters.** With four checks a filter selects between four
+  and three. Precondition: about ten checks.
+
 ## Considered and rejected for v1
 
 - Web UI / dashboard — a non-goal, not a deferral.
