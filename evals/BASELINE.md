@@ -185,6 +185,77 @@ on `first_name`/`last_name` context lines in a whitespace diff. Parked in ROADMA
 rather than tuned further — day 4 is measurement, and tuning against the eval set is how
 a retriever gets overfitted to 30 fixtures.
 
+## Check layer baseline
+
+Four deterministic checks specified in [../docs/CHECKS.md](../docs/CHECKS.md), scored by
+`python -m evals.checks_eval`. Measured **separately from severity again**, and for the
+same reason retrieval is: a check finding and a blast-radius finding are different claims,
+and one number cannot say which of them was wrong.
+
+| Metric | Value |
+|---|---|
+| Precision | **1.000** |
+| Recall | **1.000** |
+| False-positive rate on idiomatic near misses | **0.000** |
+| Exact match | 8/8 |
+| Severity fixtures drawing no check finding | **28/30** |
+| Undeclared findings on severity fixtures | **0** |
+
+### Read the 1.000 with suspicion
+
+**Precision and recall of 1.000 over 8 fixtures I wrote myself is weak evidence and
+should not be quoted next to the severity numbers.** Those 8 diffs were written from the
+spec, by the same person who then wrote the checks to satisfy it. Perfect scores are what
+that process produces almost by construction; they demonstrate the checks do what the spec
+says, not that the spec describes the right four checks.
+
+The two rows worth trusting are the last two, because nothing was tuned against them:
+
+**28/30 severity fixtures draw no check finding at all.** Those were written on day 3,
+long before this layer existed, so they are the closest available stand-in for ordinary
+PRs. A check layer that fired on half of them would be noise no matter how it scored on
+its own fixtures.
+
+The 2 that do fire are declared by name in `checks_eval.py` rather than tolerated:
+
+| Fixture | Check | Right or wrong |
+|---|---|---|
+| `p03_test_added` | `deprecated-tests-key` | Right. It really does add a deprecated `tests:` key. |
+| `p04_new_unused_model` | `missing-schema-entry` | Right. The new model really has no YAML entry. |
+
+Both are labelled `should_pass` on **severity**, and both still are. That is the whole
+design: a check finding is advisory, renders in its own section, and never reaches
+`Assessment.severity` or the commit status.
+
+### The invariant, and how it is pinned
+
+A lint finding has no reach — `select *` in a model with 200 consumers is exactly as bad
+as in a leaf — so folding one into the severity scale would either amplify it by reach
+(false, and it would inflate the 0.200 FPR) or leave it on a scale whose entire meaning is
+*structural trigger × reach* while having neither.
+
+`CheckFinding` therefore rejects severity `high` at construction, and
+`tests/test_checks.py::test_a_check_finding_never_moves_the_blast_radius_severity` pins
+`p03`: it fires a check and its severity stays exactly where it was.
+
+Note that the pinned value is **HIGH, which is wrong** — `p03` is one of the two day-3
+false positives behind the published 0.200. Asserting `low` would have passed only after
+the unrelated day-7 fix and then silently stopped testing anything. The assertion is that
+this layer left the number where it found it.
+
+**The day-3 and day-4 baselines are unchanged at 0.800 / 0.533 / 0.200 and 0.708 / 0.630 /
+0.455.** `evals/results.json` and `evals/retrieval_results.json` re-ran byte-identical
+after the check layer landed, which is the evidence that checks are a peer of the blast
+radius rather than a component of it.
+
+### Known limitation
+
+Checks read **only added diff lines**, never whole files. A check cannot see that a
+pre-existing line is wrong, only that a new one is. That is deliberate — it is what makes
+the grandfathering machinery a brownfield reviewer needs unnecessary here (see
+[../ROADMAP.md](../ROADMAP.md) for the precondition that would change it) — but it is a
+real limit on what this layer can catch.
+
 ## What is not measured here
 
 - **Cost and latency** — no LLM calls (day 6).

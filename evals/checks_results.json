@@ -1,0 +1,101 @@
+{
+  "summary": {
+    "checks": 4,
+    "fixtures": 8,
+    "precision": 1.0,
+    "recall": 1.0,
+    "false_positive_rate_on_near_misses": 0.0,
+    "exact_match": 8,
+    "severity_fixtures_silent": 28,
+    "severity_fixtures_total": 30,
+    "undeclared_findings_on_severity_fixtures": 0
+  },
+  "fixtures": [
+    {
+      "id": "c01_new_model_no_yaml",
+      "expected": [
+        "missing-schema-entry"
+      ],
+      "got": [
+        "missing-schema-entry"
+      ],
+      "pass": true
+    },
+    {
+      "id": "c01n_new_model_with_yaml",
+      "expected": [],
+      "got": [],
+      "pass": true
+    },
+    {
+      "id": "c02_deprecated_tests_key",
+      "expected": [
+        "deprecated-tests-key"
+      ],
+      "got": [
+        "deprecated-tests-key"
+      ],
+      "pass": true
+    },
+    {
+      "id": "c02n_data_tests_key",
+      "expected": [],
+      "got": [],
+      "pass": true
+    },
+    {
+      "id": "c03_hardcoded_relation",
+      "expected": [
+        "hardcoded-relation"
+      ],
+      "got": [
+        "hardcoded-relation"
+      ],
+      "pass": true
+    },
+    {
+      "id": "c03n_source_macro",
+      "expected": [],
+      "got": [],
+      "pass": true
+    },
+    {
+      "id": "c04_staging_refs_mart",
+      "expected": [
+        "cross-layer-reference"
+      ],
+      "got": [
+        "cross-layer-reference"
+      ],
+      "pass": true
+    },
+    {
+      "id": "c04n_mart_refs_staging",
+      "expected": [],
+      "got": [],
+      "pass": true
+    }
+  ],
+  "severity_fixture_noise": [
+    {
+      "id": "p03_test_added",
+      "got": [
+        "deprecated-tests-key"
+      ],
+      "declared": [
+        "deprecated-tests-key"
+      ],
+      "unexpected": []
+    },
+    {
+      "id": "p04_new_unused_model",
+      "got": [
+        "missing-schema-entry"
+      ],
+      "declared": [
+        "missing-schema-entry"
+      ],
+      "unexpected": []
+    }
+  ]
+}

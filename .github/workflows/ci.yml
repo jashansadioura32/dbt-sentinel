@@ -49,6 +49,9 @@ jobs:
       - name: Retrieval eval
         run: python -m evals.retrieval_eval
 
+      - name: Check-layer eval
+        run: python -m evals.checks_eval
+
       - name: Assert published baselines have not regressed
         run: python .github/scripts/check_baselines.py
 
@@ -60,3 +63,4 @@ jobs:
           path: |
             evals/results.json
             evals/retrieval_results.json
+            evals/checks_results.json

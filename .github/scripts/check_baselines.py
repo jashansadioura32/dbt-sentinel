@@ -57,6 +57,29 @@ CHECKS: list[tuple[str, str, str, float, str]] = [
         0.455,
         "correct silence on no-rule fixtures",
     ),
+    # Check layer. Precision and recall are 1.000 on 8 self-authored fixtures, which is
+    # weak evidence and is labelled as such in BASELINE.md — the floors are set there
+    # anyway, because a drop would mean a check stopped working on the case it was
+    # written for. The two that carry real weight are below.
+    ("evals/checks_results.json", "summary.precision", ">=", 1.000, "check precision"),
+    ("evals/checks_results.json", "summary.recall", ">=", 1.000, "check recall"),
+    (
+        "evals/checks_results.json",
+        "summary.false_positive_rate_on_near_misses",
+        "<=",
+        0.000,
+        "check FPR on idiomatic near misses",
+    ),
+    (
+        # The real noise guard: fixtures written before the check layer existed, so
+        # nothing was tuned against them. Anything above 0 means a check started firing
+        # on an ordinary PR and nobody declared it.
+        "evals/checks_results.json",
+        "summary.undeclared_findings_on_severity_fixtures",
+        "<=",
+        0,
+        "undeclared check findings on the severity fixtures",
+    ),
 ]
 
 

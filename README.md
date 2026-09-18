@@ -92,6 +92,7 @@ Exit code is 1, so it works as a CI gate. On your own project, point `--manifest
 | `--explain` | show which policy rules were retrieved, with scores |
 | `--agent` | add LLM judgment findings (needs `OPENAI_API_KEY`) |
 | `--changed-at ISO8601` | warn if the manifest predates the change |
+| `--no-checks` | skip the deterministic check layer ([docs/CHECKS.md](docs/CHECKS.md)) |
 
 ### Exit codes
 
