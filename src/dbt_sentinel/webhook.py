@@ -115,7 +115,15 @@ def run_review(summary: dict[str, Any], installation_id: int, client: Any = None
     try:
         github.set_commit_status(pr, "pending", "Reviewing dbt changes...")
         outcome = review_pull_request(github, pr)
-        github.upsert_comment(pr, outcome.comment, COMMENT_MARKER)
+        if outcome.has_nothing_to_report:
+            # A PR that stopped touching dbt models should carry no review at all.
+            # Editing the old one down to "nothing to report" leaves what reads as a
+            # stale result on a PR that is now clean.
+            stale = github.find_comment(pr, COMMENT_MARKER)
+            if stale is not None:
+                github.delete_comment(pr, stale["id"])
+        else:
+            github.upsert_comment(pr, outcome.comment, COMMENT_MARKER)
         github.set_commit_status(pr, outcome.status_state, outcome.status_description)
     except GitHubError as exc:
         logger.error("review failed for %s#%s: %s", pr.slug, pr.number, exc)

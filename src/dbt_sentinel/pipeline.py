@@ -36,6 +36,8 @@ class ReviewOutcome:
     cost_usd: float = 0.0
     latency_s: float = 0.0
     changed_nodes: int = 0
+    has_unresolved: bool = False
+    reviewed: bool = True
 
     @property
     def status_state(self) -> str:
@@ -45,6 +47,27 @@ class ReviewOutcome:
         switched off within a week, and then the HIGH signal is gone too.
         """
         return "failure" if self.severity == "high" else "success"
+
+    @property
+    def has_nothing_to_report(self) -> bool:
+        """True when this PR touches no dbt node and nothing was left unresolved.
+
+        Manifest-provenance warnings are excluded deliberately: "the committed manifest
+        may be stale" says nothing about a PR that changed no model, and treating it as
+        content would keep a review comment alive on every docs-only PR forever.
+
+        Unresolved files are *not* excluded. A changed macro or a model missing from a
+        stale manifest is exactly where silence is dangerous (design rule 4), so a
+        review carrying one is never deleted.
+
+        A review that never ran is never "nothing to report" — deleting the comment that
+        explains why the manifest or diff could not be read would erase the only notice
+        the user gets that the tool is broken.
+
+        Derived from the counts rather than by matching the rendered text, so wording
+        changes in report.py cannot silently turn deletion off.
+        """
+        return self.reviewed and self.changed_nodes == 0 and not self.has_unresolved
 
     @property
     def status_description(self) -> str:
@@ -132,6 +155,7 @@ def review_pull_request(
             ),
             manifest_source=manifest_source,
             warnings=warnings,
+            reviewed=False,
         )
 
     try:
@@ -146,6 +170,7 @@ def review_pull_request(
             ),
             manifest_source=manifest_source,
             warnings=warnings,
+            reviewed=False,
         )
 
     changes, unresolved = resolve_changes(diff_text, lineage)
@@ -195,6 +220,7 @@ def review_pull_request(
         cost_usd=cost,
         latency_s=latency,
         changed_nodes=len(changes),
+        has_unresolved=bool(unresolved),
     )
 
 

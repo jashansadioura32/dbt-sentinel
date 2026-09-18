@@ -44,6 +44,7 @@ class FakeGitHub:
         self.statuses: list[tuple[str, str]] = []
         self.posted: list[str] = []
         self.patched: list[str] = []
+        self.deleted: list[int] = []
         self._fail_on = fail_on
 
     def _maybe_fail(self, name: str) -> None:
@@ -68,13 +69,25 @@ class FakeGitHub:
         self.comments.append({"id": len(self.comments) + 1, "body": body})
         return self.comments[-1]
 
-    def upsert_comment(self, pr, body, marker):
-        self._maybe_fail("upsert_comment")
+    def find_comment(self, pr, marker):
+        self._maybe_fail("find_comment")
         for comment in self.comments:
             if marker in comment["body"]:
-                comment["body"] = body
-                self.patched.append(body)
                 return comment
+        return None
+
+    def delete_comment(self, pr, comment_id):
+        self._maybe_fail("delete_comment")
+        self.deleted.append(comment_id)
+        self.comments = [c for c in self.comments if c["id"] != comment_id]
+
+    def upsert_comment(self, pr, body, marker):
+        self._maybe_fail("upsert_comment")
+        existing = self.find_comment(pr, marker)
+        if existing is not None:
+            existing["body"] = body
+            self.patched.append(body)
+            return existing
         return self.post_comment(pr, body)
 
     def set_commit_status(self, pr, state, description, context="dbt-sentinel"):
@@ -195,6 +208,101 @@ def test_unrelated_comments_are_not_overwritten():
     client.upsert_comment(PR, f"{COMMENT_MARKER}\nreview", COMMENT_MARKER)
     assert client.comments[0]["body"] == "a human review"
     assert len(client.comments) == 2
+
+
+def test_marker_is_found_beyond_the_first_page_of_comments(monkeypatch):
+    """A busy PR must still update in place rather than posting a second review.
+
+    The original single `per_page=100` request found nothing past comment 100, so the
+    bot appended a duplicate on exactly the PRs where a duplicate is least welcome.
+    """
+    import dbt_sentinel.github as gh
+
+    ours = {"id": 999, "body": f"{COMMENT_MARKER}\nour earlier review"}
+    pages = {1: [{"id": i, "body": "chatter"} for i in range(100)], 2: [ours]}
+    seen: list[str] = []
+
+    def fake_request(method, url, token, *, body=None, accept="application/vnd.github+json"):
+        seen.append(url)
+        page = int(url.rsplit("page=", 1)[1])
+        return pages.get(page, [])
+
+    monkeypatch.setattr(gh, "_request", fake_request)
+    found = gh.GitHubClient("t").find_comment(PR, COMMENT_MARKER)
+
+    assert found == ours
+    assert len(seen) == 2, "should have paginated rather than giving up after one page"
+
+
+def test_pagination_stops_on_a_short_page(monkeypatch):
+    """A short page is the last page — keep requesting and we burn the rate limit."""
+    import dbt_sentinel.github as gh
+
+    calls: list[str] = []
+
+    def fake_request(method, url, token, *, body=None, accept="application/vnd.github+json"):
+        calls.append(url)
+        return [{"id": 1, "body": "unrelated"}]
+
+    monkeypatch.setattr(gh, "_request", fake_request)
+    assert gh.GitHubClient("t").find_comment(PR, COMMENT_MARKER) is None
+    assert len(calls) == 1
+
+
+def test_review_is_deleted_when_a_pr_stops_touching_dbt_files():
+    """Editing a stale review down to "nothing to report" still reads as a result."""
+    unrelated = (
+        "diff --git a/README.md b/README.md\n"
+        "--- a/README.md\n+++ b/README.md\n"
+        "@@ -1 +1 @@\n-old\n+new\n"
+    )
+    client = FakeGitHub(
+        diff=unrelated,
+        existing_comments=[{"id": 7, "body": f"{COMMENT_MARKER}\nold HIGH review"}],
+    )
+    run_review(summarise_payload("pull_request", _pr_payload()), 99, client=client)
+
+    assert client.deleted == [7]
+    assert client.comments == []
+    assert not client.patched and not client.posted
+
+
+def test_nothing_to_delete_is_not_an_error():
+    """No prior comment is the common case; it must not raise or post an empty review."""
+    unrelated = (
+        "diff --git a/README.md b/README.md\n"
+        "--- a/README.md\n+++ b/README.md\n"
+        "@@ -1 +1 @@\n-old\n+new\n"
+    )
+    client = FakeGitHub(diff=unrelated)
+    result = run_review(summarise_payload("pull_request", _pr_payload()), 99, client=client)
+
+    assert result["ok"] is True
+    assert client.deleted == [] and client.posted == []
+
+
+@pytest.mark.parametrize("broken", ["fetch_diff", "fetch_file"])
+def test_a_failed_review_never_deletes_the_comment_explaining_it(broken):
+    """A review that could not run resolves zero nodes — but must not read as clean.
+
+    Both failure paths return changed_nodes=0, so a count-only test would delete the
+    only notice the user gets that the tool is broken.
+    """
+    client = FakeGitHub(
+        fail_on=broken,
+        existing_comments=[{"id": 7, "body": f"{COMMENT_MARKER}\nprior review"}],
+    )
+    run_review(summarise_payload("pull_request", _pr_payload()), 99, client=client)
+    assert client.deleted == []
+
+
+def test_a_real_review_is_never_deleted():
+    """Only an empty review deletes. A HIGH finding must survive as a comment."""
+    client = FakeGitHub(existing_comments=[{"id": 7, "body": f"{COMMENT_MARKER}\nold"}])
+    run_review(summarise_payload("pull_request", _pr_payload()), 99, client=client)
+
+    assert client.deleted == []
+    assert client.patched, "the existing review should have been updated in place"
 
 
 # ---------- webhook routing ----------

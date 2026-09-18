@@ -37,6 +37,12 @@ USER_AGENT = "dbt-sentinel"
 _JWT_CLOCK_SKEW_S = 60
 _JWT_TTL_S = 540  # 9 minutes; GitHub's ceiling is 10
 
+# Comment pagination. The cap bounds the damage when a PR has thousands of comments:
+# worst case we post a duplicate, which beats spending the rate limit budget walking
+# every page on every push.
+_COMMENTS_PER_PAGE = 100
+_MAX_COMMENT_PAGES = 10
+
 
 class GitHubError(RuntimeError):
     """A GitHub call failed in a way the caller must surface, not swallow."""
@@ -250,6 +256,37 @@ class GitHubClient:
             body={"body": body},
         )
 
+    def find_comment(self, pr: PullRequestRef, marker: str) -> dict | None:
+        """Find our own comment by its hidden marker, across every page.
+
+        Paginating matters: a single `per_page=100` request finds nothing on a PR with
+        more than 100 comments, so the bot posts a second review instead of updating the
+        first — exactly the wall of stale reviews the marker exists to prevent. Busy PRs
+        are also the ones where a duplicate is least welcome.
+        """
+        page = 1
+        while page <= _MAX_COMMENT_PAGES:
+            batch = _request(
+                "GET",
+                f"{API_ROOT}/repos/{pr.slug}/issues/{pr.number}/comments"
+                f"?per_page={_COMMENTS_PER_PAGE}&page={page}",
+                self._token,
+            ) or []
+            for comment in batch:
+                if marker in (comment.get("body") or ""):
+                    return comment
+            # A short page is the last page; GitHub sends no cursor we can rely on here.
+            if len(batch) < _COMMENTS_PER_PAGE:
+                return None
+            page += 1
+        logger.warning(
+            "gave up scanning for our comment marker after %d pages on %s#%s",
+            _MAX_COMMENT_PAGES,
+            pr.slug,
+            pr.number,
+        )
+        return None
+
     def upsert_comment(self, pr: PullRequestRef, body: str, marker: str) -> dict:
         """Update our previous comment in place rather than appending a new one.
 
@@ -257,20 +294,28 @@ class GitHubClient:
         reviews, and reviewers stop reading all of them. The marker is an HTML comment,
         invisible in rendered Markdown.
         """
-        existing = _request(
-            "GET",
-            f"{API_ROOT}/repos/{pr.slug}/issues/{pr.number}/comments?per_page=100",
+        existing = self.find_comment(pr, marker)
+        if existing is not None:
+            return _request(
+                "PATCH",
+                f"{API_ROOT}/repos/{pr.slug}/issues/comments/{existing['id']}",
+                self._token,
+                body={"body": body},
+            )
+        return self.post_comment(pr, body)
+
+    def delete_comment(self, pr: PullRequestRef, comment_id: int) -> None:
+        """Remove our comment entirely.
+
+        Used when a PR stops touching dbt models at all: editing the old review down to
+        "nothing to report" leaves a review on a PR that no longer has anything to
+        review, which reads as a stale result rather than a clean one.
+        """
+        _request(
+            "DELETE",
+            f"{API_ROOT}/repos/{pr.slug}/issues/comments/{comment_id}",
             self._token,
         )
-        for comment in existing or []:
-            if marker in (comment.get("body") or ""):
-                return _request(
-                    "PATCH",
-                    f"{API_ROOT}/repos/{pr.slug}/issues/comments/{comment['id']}",
-                    self._token,
-                    body={"body": body},
-                )
-        return self.post_comment(pr, body)
 
     def set_commit_status(
         self, pr: PullRequestRef, state: str, description: str, context: str = "dbt-sentinel"

@@ -93,6 +93,18 @@ Exit code is 1, so it works as a CI gate. On your own project, point `--manifest
 | `--agent` | add LLM judgment findings (needs `OPENAI_API_KEY`) |
 | `--changed-at ISO8601` | warn if the manifest predates the change |
 
+### Exit codes
+
+| Code | Means |
+|---|---|
+| `0` | Reviewed. Nothing at or above `--fail-on`. |
+| `1` | Reviewed. Findings at or above `--fail-on`. |
+| `2` | Could not run: unreadable manifest, unreadable diff, malformed argument. |
+
+The `1` / `2` split is deliberate. A pipeline that reports a missing manifest as a failed
+review teaches its users that the tool cries wolf, and it gets switched off long before it
+ever reports a real breaking change.
+
 ---
 
 ## Architecture

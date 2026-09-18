@@ -1,4 +1,15 @@
-"""CLI: `python -m dbt_sentinel --manifest target/manifest.json --diff pr.diff`"""
+"""CLI: `python -m dbt_sentinel --manifest target/manifest.json --diff pr.diff`
+
+Exit codes, because CI needs to tell a finding from a misconfiguration:
+
+    0  Reviewed. Nothing at or above --fail-on.
+    1  Reviewed. Findings at or above --fail-on.
+    2  Could not run: unreadable manifest, unreadable diff, malformed argument.
+
+The 1/2 split is the load-bearing one. A pipeline that reports a missing manifest as a
+failed review teaches its users that the tool cries wolf, and the tool gets switched off
+long before it ever reports a real breaking change.
+"""
 
 from __future__ import annotations
 
@@ -125,7 +136,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    diff_text = sys.stdin.read() if args.diff == "-" else Path(args.diff).read_text(encoding="utf-8")
+    if args.diff == "-":
+        diff_text = sys.stdin.read()
+    else:
+        try:
+            diff_text = Path(args.diff).read_text(encoding="utf-8")
+        except OSError as exc:
+            # Unguarded, this raised and exited 1 — reporting a missing file as though
+            # the PR were risky.
+            print(
+                f"error: could not read --diff {args.diff!r}: {exc.strerror or exc}. "
+                f"Pass a path to a unified diff, or `-` to read one from stdin.",
+                file=sys.stderr,
+            )
+            return 2
 
     changed_at = None
     if args.changed_at:
