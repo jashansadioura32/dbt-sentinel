@@ -78,27 +78,56 @@ GitHub webhook
 
 ## Current state
 
-Days 1-2 complete:
+Days 1-10 complete, plus a check layer (3 phases) and the day-7 iteration round.
+180 tests pass.
+
 - `models.py` — domain types (Node, ChangedFile, ChangedNode, BlastRadius)
 - `lineage.py` — manifest parsing, node graph, BFS blast radius
 - `diff.py` — unified diff parsing, file->node resolution, column extraction
 - `report.py` — severity scoring, Markdown + Mermaid rendering
+- `retrieval.py` — hybrid keyword + TF-IDF retrieval over the policy pack
+- `agent.py` — reviewer agent, tool-calling, structured output, degradation paths
+- `checks.py` — four deterministic lint checks, a peer of the blast radius
+- `github.py` / `webhook.py` / `pipeline.py` — the GitHub App
 - `cli.py` — entrypoint with `--fail-on` exit codes
-- `tests/test_day2.py` — 11 regression tests
+- `evals/` — 30 labelled severity fixtures + 8 check fixtures, four harnesses
+- `docs/` — PRD, architecture + ADRs, eval report, checks spec, deployment
 
-Three false positives were found and fixed on day 2. The tests encoding them must
-keep passing:
+**Published metrics** (day 7, `evals/RESULTS_V2.md`): precision 0.909, recall 0.588,
+FPR 0.000, 0 fixtures silently dropped. Retrieval precision@3 0.636 / recall@3 0.778.
+CI ratchets these floors — `.github/scripts/check_baselines.py` fails the build on a
+regression, and moving a floor requires updating the published doc in the same commit.
+
+### The two things that remain
+
+1. **The agent has never run.** Every agent test injects a fake client. `evals/compare.py`
+   is written and gated, but the OpenAI account has no credits, so `RESULTS_V1.md` does
+   not exist. Its plumbing is proven; its review quality is entirely unknown.
+2. **Never deployed.** The GitHub App is wired and tested against a fake client. No real
+   PR has received a comment.
+
+### Regression tests that must keep passing
+
+Day 2 (three false positives):
 - Comment-only change must not score above LOW
 - A shared schema.yml must not flag models that merely share a column name
 - A model changed in both .sql and .yml must be reported once
 
+Day 7 (`tests/test_day7.py`, the two deferred failure modes):
+- A YAML edit matching a real node must never resolve to nothing — an unattributable
+  removed column is an explicit medium warning, never silence and never a guessed owner
+- An added column is not structural; `p10` and `b01` must not converge
+- `evals/compare.py` must exit 2 and write no file when the agent arm never ran, keyed
+  off token spend rather than the errored flag
+
 ## Known limitations — documented, not hidden
 
-| Limitation | Planned |
+| Limitation | Status |
 |---|---|
 | Regex column extraction (misses `select *`, CTE aliases, macro-generated columns) | Out of scope for v1 |
 | Macro changes don't resolve to models | Warned, not resolved |
-| Manifest assumed current | Freshness warning on day 3 |
+| A removed column in a shared schema.yml has no provable owner | Explicit medium uncertainty; sole remaining FP (`s03`) |
+| Manifest assumed current | Freshness warning implemented |
 
 ## Definition of done for the project
 

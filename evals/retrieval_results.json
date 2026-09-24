@@ -4,9 +4,9 @@
     "n_fixtures": 30,
     "n_expecting_rules": 19,
     "n_expecting_no_rules": 11,
-    "precision_at_k": 0.708,
-    "recall_at_k": 0.63,
-    "hit_at_k": 0.684,
+    "precision_at_k": 0.636,
+    "recall_at_k": 0.778,
+    "hit_at_k": 0.842,
     "correct_silence_rate": 0.455,
     "pack_size": 14
   },
@@ -54,10 +54,19 @@
         "contract-enforcement",
         "contract-breaking-change"
       ],
-      "retrieved": [],
-      "hits": [],
-      "resolved_nodes": [],
-      "unresolvable": true
+      "retrieved": [
+        "test-coverage-keys",
+        "type-safety",
+        "contract-enforcement"
+      ],
+      "hits": [
+        "contract-enforcement"
+      ],
+      "resolved_nodes": [
+        "fct_order_payments",
+        "rpt_customer_revenue"
+      ],
+      "unresolvable": false
     },
     {
       "id": "b04_dropped_dedup",
@@ -100,10 +109,20 @@
         "contract-enforcement",
         "type-safety"
       ],
-      "retrieved": [],
-      "hits": [],
-      "resolved_nodes": [],
-      "unresolvable": true
+      "retrieved": [
+        "type-safety",
+        "contract-enforcement",
+        "pii-tagging"
+      ],
+      "hits": [
+        "contract-enforcement",
+        "type-safety"
+      ],
+      "resolved_nodes": [
+        "fct_order_payments",
+        "rpt_customer_revenue"
+      ],
+      "unresolvable": false
     },
     {
       "id": "b07_removed_incremental_filter",
@@ -331,10 +350,19 @@
       "expected": [
         "contract-enforcement"
       ],
-      "retrieved": [],
-      "hits": [],
-      "resolved_nodes": [],
-      "unresolvable": true
+      "retrieved": [
+        "type-safety",
+        "contract-enforcement",
+        "pii-tagging"
+      ],
+      "hits": [
+        "contract-enforcement"
+      ],
+      "resolved_nodes": [
+        "fct_order_payments",
+        "rpt_customer_revenue"
+      ],
+      "unresolvable": false
     },
     {
       "id": "s04_exposure_owner_change",
@@ -344,8 +372,12 @@
       ],
       "retrieved": [],
       "hits": [],
-      "resolved_nodes": [],
-      "unresolvable": true
+      "resolved_nodes": [
+        "customer_success_churn",
+        "exec_dashboard",
+        "finance_month_end"
+      ],
+      "unresolvable": false
     },
     {
       "id": "s05_public_access_added",

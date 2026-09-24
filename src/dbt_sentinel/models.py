@@ -65,13 +65,24 @@ class ChangedNode:
     added_columns: tuple[str, ...] = ()
     removed_columns: tuple[str, ...] = ()
     has_semantic_change: bool = True
+    # Columns the diff removed but could not pin to one model: a shared schema.yml whose
+    # hunk shows no model heading. Attributing them to every node in the file would
+    # recreate the day-2 false positive; dropping them hid a removed contract column
+    # entirely. They are reported as an explicit uncertainty instead. Design rule 4.
+    unattributed_removed_columns: tuple[str, ...] = ()
 
     @property
     def is_structural(self) -> bool:
-        """Does this change alter the contract other models rely on?"""
+        """Does this change break the contract other models rely on?
+
+        Added columns are deliberately excluded. Adding a column breaks no consumer —
+        `select *` picks it up, an explicit select ignores it — so counting it here
+        scored an additive column the same HIGH as a rename with the same reach, and
+        was the whole of the published 0.200 false-positive rate. Removal, deletion
+        and rename are the changes that take something away from a consumer.
+        """
         return bool(
-            self.added_columns
-            or self.removed_columns
+            self.removed_columns
             or self.change_type in (ChangeType.DELETED, ChangeType.RENAMED)
         )
 

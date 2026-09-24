@@ -56,6 +56,18 @@ def assess(changed: ChangedNode, blast: BlastRadius) -> Assessment:
             raise_to("medium")
             reasons.append(f"Removed column(s) `{cols}` with no known consumers")
 
+    if changed.unattributed_removed_columns:
+        cols = ", ".join(changed.unattributed_removed_columns)
+        # Raised to medium, not high: a removed column is real, but we cannot prove it
+        # belongs to this node rather than a sibling in the same schema.yml. Silence
+        # here is the failure mode design rule 4 exists to prevent.
+        raise_to("medium")
+        reasons.append(
+            f"Removed column(s) `{cols}` in `{changed.file.path}` could not be attributed "
+            f"to a specific model — the hunk shows no model heading. Verify whether "
+            f"`{changed.node.name}` declares them."
+        )
+
     if changed.change_type is ChangeType.DELETED and blast.size:
         raise_to("high")
         reasons.append(f"Model deleted while {blast.size} node(s) still depend on it")

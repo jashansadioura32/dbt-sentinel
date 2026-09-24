@@ -1,44 +1,39 @@
 {
   "summary": {
     "n_fixtures": 30,
-    "n_scored": 26,
-    "n_errored": 4,
-    "errored_ids": [
-      "b03_contract_column_dropped",
-      "b06_type_narrowing_on_contract",
-      "s03_contract_widened_safely",
-      "s04_exposure_owner_change"
-    ],
+    "n_scored": 30,
+    "n_errored": 0,
+    "errored_ids": [],
     "confusion": {
-      "tp": 8,
-      "fp": 2,
+      "tp": 10,
+      "fp": 1,
       "fn": 7,
-      "tn": 9
+      "tn": 12
     },
-    "precision": 0.8,
-    "recall": 0.533,
-    "f1": 0.64,
-    "false_positive_rate_should_pass": 0.2,
-    "exact_severity_match": 14,
-    "exact_severity_match_rate": 0.538,
+    "precision": 0.909,
+    "recall": 0.588,
+    "f1": 0.714,
+    "false_positive_rate_should_pass": 0.0,
+    "exact_severity_match": 17,
+    "exact_severity_match_rate": 0.567,
     "by_category": {
       "breaking": {
         "n": 10,
-        "errored": 2,
+        "errored": 0,
         "exact_match": 3,
-        "exact_match_rate": 0.375
+        "exact_match_rate": 0.3
       },
       "should_pass": {
         "n": 10,
         "errored": 0,
-        "exact_match": 8,
-        "exact_match_rate": 0.8
+        "exact_match": 10,
+        "exact_match_rate": 1.0
       },
       "subtle": {
         "n": 10,
-        "errored": 2,
-        "exact_match": 3,
-        "exact_match_rate": 0.375
+        "errored": 0,
+        "exact_match": 4,
+        "exact_match_rate": 0.4
       }
     }
   },
@@ -80,11 +75,19 @@
       "id": "b03_contract_column_dropped",
       "category": "breaking",
       "expected": "high",
-      "actual": null,
-      "errored": true,
-      "resolved": [],
+      "actual": "medium",
+      "errored": false,
+      "resolved": [
+        "fct_order_payments",
+        "rpt_customer_revenue"
+      ],
       "unresolved": [],
-      "reasons": []
+      "reasons": [
+        "Removed column(s) `customer_id` in `models/marts/schema.yml` could not be attributed to a specific model \u2014 the hunk shows no model heading. Verify whether `fct_order_payments` declares them.",
+        "Reaches 2 exposure(s): finance_month_end, exec_dashboard (owners: Analytics Team, Finance Data)",
+        "Reaches 1 model(s) with public access",
+        "Incremental model \u2014 change may require a full refresh to take effect"
+      ]
     },
     {
       "id": "b04_dropped_dedup",
@@ -120,11 +123,18 @@
       "id": "b06_type_narrowing_on_contract",
       "category": "breaking",
       "expected": "high",
-      "actual": null,
-      "errored": true,
-      "resolved": [],
+      "actual": "medium",
+      "errored": false,
+      "resolved": [
+        "fct_order_payments",
+        "rpt_customer_revenue"
+      ],
       "unresolved": [],
-      "reasons": []
+      "reasons": [
+        "Reaches 2 exposure(s): finance_month_end, exec_dashboard (owners: Analytics Team, Finance Data)",
+        "Reaches 1 model(s) with public access",
+        "Incremental model \u2014 change may require a full refresh to take effect"
+      ]
     },
     {
       "id": "b07_removed_incremental_filter",
@@ -218,7 +228,7 @@
       "id": "p03_test_added",
       "category": "should_pass",
       "expected": "low",
-      "actual": "high",
+      "actual": "low",
       "errored": false,
       "resolved": [
         "stg_payments"
@@ -312,7 +322,7 @@
       "id": "p10_additive_column",
       "category": "should_pass",
       "expected": "low",
-      "actual": "high",
+      "actual": "low",
       "errored": false,
       "resolved": [
         "stg_orders"
@@ -357,21 +367,34 @@
       "id": "s03_contract_widened_safely",
       "category": "subtle",
       "expected": "low",
-      "actual": null,
-      "errored": true,
-      "resolved": [],
+      "actual": "medium",
+      "errored": false,
+      "resolved": [
+        "fct_order_payments",
+        "rpt_customer_revenue"
+      ],
       "unresolved": [],
-      "reasons": []
+      "reasons": [
+        "Reaches 2 exposure(s): finance_month_end, exec_dashboard (owners: Analytics Team, Finance Data)",
+        "Reaches 1 model(s) with public access",
+        "Incremental model \u2014 change may require a full refresh to take effect"
+      ]
     },
     {
       "id": "s04_exposure_owner_change",
       "category": "subtle",
       "expected": "low",
-      "actual": null,
-      "errored": true,
-      "resolved": [],
+      "actual": "low",
+      "errored": false,
+      "resolved": [
+        "customer_success_churn",
+        "exec_dashboard",
+        "finance_month_end"
+      ],
       "unresolved": [],
-      "reasons": []
+      "reasons": [
+        "Logic change with 0 downstream node(s), none contracted"
+      ]
     },
     {
       "id": "s05_public_access_added",

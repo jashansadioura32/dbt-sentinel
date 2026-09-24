@@ -321,7 +321,43 @@ def render(rows: list[Comparison], summary: dict) -> str:
     return "\n".join(lines)
 
 
+def _agent_arm_wipeout(rows: list[Comparison]) -> str | None:
+    """Returns a representative failure detail when *every* agent call failed.
+
+    Distinguished from ordinary errors on purpose: a few degraded fixtures are a real
+    measurement worth publishing, while a total wipeout means the arm never ran and any
+    metric derived from it is an artefact of the failure, not of the model.
+    """
+    if not rows:
+        return None
+    # Token spend, not the errored flag, is the evidence that the model was reached.
+    # A fixture resolving to zero nodes short-circuits before any call and records a
+    # genuine-looking "no findings" at 0 tokens, so counting those as successes let a
+    # fully failed run past the guard on 3 of 30 rows.
+    if any(row.input_tokens or row.output_tokens for row in rows):
+        return None
+    for row in rows:
+        if row.agent.errored and row.agent.detail and row.agent.detail != "not run":
+            return row.agent.detail[:200]
+    return "no agent call consumed any tokens"
+
+
+
+def _force_utf8_stdout() -> None:
+    """Windows consoles default to cp1252, which cannot encode the arrows in the tables.
+
+    Without this, `python -m evals.checks_eval` dies with a UnicodeEncodeError on a
+    stock Windows clone and the published numbers cannot be reproduced there at all.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except (ValueError, OSError):
+                pass
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_stdout()
     parser = argparse.ArgumentParser(prog="evals.compare")
     parser.add_argument("--only", choices=["breaking", "should_pass", "subtle"])
     parser.add_argument("--fixtures", help="comma-separated fixture ids")
@@ -362,6 +398,23 @@ def main(argv: list[str] | None = None) -> int:
         if live:
             print(f"[{index}/{len(labels)}] {label['id']}...", file=sys.stderr, flush=True)
         rows.append(run_fixture(label, lineage, pack, live))
+
+    if live and (wipeout := _agent_arm_wipeout(rows)) is not None:
+        # A key that is present but rejected on every call is the same untrustworthy
+        # state as no key: an all-ERROR agent arm scores as 30 schema violations at
+        # $0.00 and reads like a measured result. The missing-key guard above did not
+        # catch this, because the key existed — the credits did not. Exiting here keeps
+        # the refusal to publish a fabricated arm honest in both cases.
+        print(
+            f"error: the agent arm failed on all {len(rows)} fixtures and produced no"
+            f" usable output.\n"
+            f"       Representative failure: {wipeout}\n"
+            f"       No results file was written. Fix the cause and re-run, or pass"
+            f" --dry-run\n"
+            f"       to score the baseline arm only.",
+            file=sys.stderr,
+        )
+        return 2
 
     summary = summarise(rows, live)
     print(render(rows, summary))

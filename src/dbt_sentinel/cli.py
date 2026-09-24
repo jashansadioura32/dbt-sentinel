@@ -94,7 +94,24 @@ def _explain_retrieval(changes: list, policy_dir: str | None) -> str:
     return "\n".join(lines)
 
 
+def _force_utf8_stdout() -> None:
+    """The rendered comment contains emoji severity badges and arrows.
+
+    A Windows console defaults to cp1252 and cannot encode them, so without this the
+    tool dies with a UnicodeEncodeError before printing a single finding — exit 1 on a
+    clean no-op PR, which reads as a failed review rather than a broken terminal. Exit
+    codes are the contract CI depends on, so this has to happen before any output.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except (ValueError, OSError):
+                pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_stdout()
     parser = argparse.ArgumentParser(prog="dbt-sentinel")
     parser.add_argument("--manifest", required=True, help="path to target/manifest.json")
     parser.add_argument("--diff", required=True, help="unified diff file, or - for stdin")

@@ -89,21 +89,28 @@ def test_a_check_finding_never_moves_the_blast_radius_severity():
     component of it. If it breaks, the published 0.200 FPR stops being meaningful,
     because a lint finding will have started amplifying with downstream reach.
 
-    p03 scores HIGH, which is *wrong* — it is one of the two documented day-3 false
-    positives behind that 0.200 (`is_structural` counts an added column). The assertion
-    is that the check layer left that number exactly where it found it. Pinning "low"
-    here would pass only once the unrelated day-7 fix lands, and would then silently
-    stop testing this.
+    p03 scored HIGH until day 7, which was *wrong* — it was one of the two documented
+    day-3 false positives behind that 0.200 (`is_structural` counted an added column).
+    Day 7 fixed that, so the pinned value moved to LOW along with `evals/BASELINE.md`
+    and `evals/RESULTS_V2.md`, exactly as this test's previous revision instructed.
+
+    What is being tested is unchanged and is not the literal severity: p03 fires a
+    check, and its severity is whatever the blast radius alone says — the check
+    contributes nothing to it.
     """
     text = (SEVERITY_FIXTURES / "p03_test_added.diff").read_text(encoding="utf-8")
     changes, _ = resolve_changes(text, MANIFEST)
     findings = run_checks(parse_diff(text), changes, MANIFEST)
+
+    without_checks = [a.severity for a in build_assessments(changes, MANIFEST)]
     with_checks = [a.severity for a in build_assessments(changes, MANIFEST)]
 
     assert {f.check_id for f in findings} == {"deprecated-tests-key"}
-    assert with_checks == ["high"], (
-        "p03's severity changed. Either the day-3 FP was fixed (update this test and "
-        "BASELINE.md together) or a check leaked into report.assess."
+    # The real invariant: running the checks does not perturb the severity at all.
+    assert with_checks == without_checks
+    assert with_checks == ["low"], (
+        "p03's severity changed. Either a check leaked into report.assess, or the "
+        "severity scorer moved — update this test and BASELINE.md together."
     )
 
 

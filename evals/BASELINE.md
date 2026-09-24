@@ -6,6 +6,28 @@ manifest compiled by dbt 1.12.4 (schema v12) from an extended `dbt-labs/jaffle_s
 **No agent exists yet.** These numbers are the floor that day 6 measures the reviewer
 agent against. If the agent cannot beat them, it is not worth its cost or its latency.
 
+> ## Superseded by day 7 — read this first
+>
+> **The day-3 severity figures below are historical.** They are kept unedited because
+> `RESULTS_V2.md` is a before/after document and rewriting the "before" in place would
+> destroy the comparison it rests on.
+>
+> The two defects this file identified were fixed on day 7. Current severity numbers:
+>
+> | Metric | Day 3 (below) | **Day 7 (current)** |
+> |---|---|---|
+> | Precision | 0.800 | **0.909** |
+> | Recall | 0.533 | **0.588** |
+> | False-positive rate | 0.200 | **0.000** |
+> | Fixtures silently dropped | 4 | **0** |
+>
+> Retrieval moved on the same change: precision@3 0.708 → 0.636, recall@3 0.630 →
+> **0.778**. The precision fall is an improvement — 3 fixtures that used to resolve to
+> no node now reach the retriever. See [RESULTS_V2.md](RESULTS_V2.md) for the full
+> analysis and the one false positive the fix introduced.
+>
+> The check-layer numbers in this file are **unchanged** and remain current.
+
 ## Headline
 
 | Metric | Value |
@@ -42,6 +64,8 @@ better baseline than the tool deserves. Two are HIGH-labelled breaking changes.
 
 Listed in priority order. Nothing is fixed here — day 3 measures, and fixing inside the
 measuring session is what destroys a before/after comparison.
+
+**Defects 1 and 2 were fixed on day 7** ([RESULTS_V2.md](RESULTS_V2.md)). Defect 3 stands.
 
 ### 1. YAML column attribution drops the node entirely (4 fixtures, 2 of them HIGH)
 

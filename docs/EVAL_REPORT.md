@@ -53,26 +53,37 @@ suite flatters a broken resolver. This caught a real defect on the first run.
 
 No LLM. Exactly reproducible — `python -m evals.runner` on any machine gives these numbers.
 
-| Metric | Value | Target | Verdict |
-|---|---|---|---|
-| Precision | **0.800** | > 0.75 | met |
-| Recall | **0.533** | > 0.70 | **missed** |
-| F1 | 0.640 | — | — |
-| False-positive rate (should-pass) | **0.200** | < 0.10 | **missed, 2x target** |
-| Exact severity match | 14/26 (0.538) | — | — |
-| Fixtures silently dropped | **4** | 0 | **missed** |
+Measured twice: at day 3 before any fix, and at day 7 after one iteration round against
+the two failure modes day 3 identified. Both are shown because the delta is the evidence
+that the eval suite drove the fix rather than ratifying it.
 
-Confusion at the MEDIUM+ threshold: TP=8, FP=2, FN=7, TN=9.
-
-| Category | n | Errored | Exact match | Rate |
+| Metric | Day 3 | **Day 7** | Target | Verdict |
 |---|---|---|---|---|
-| breaking | 10 | 2 | 3 | 0.375 |
-| should_pass | 10 | 0 | 8 | 0.800 |
-| subtle | 10 | 2 | 3 | 0.375 |
+| Precision | 0.800 | **0.909** | > 0.75 | met |
+| Recall | 0.533 | **0.588** | > 0.70 | **missed** |
+| F1 | 0.640 | **0.714** | — | — |
+| False-positive rate (should-pass) | 0.200 | **0.000** | < 0.10 | **met** |
+| Exact severity match | 14/26 (0.538) | **17/30 (0.567)** | — | — |
+| Fixtures silently dropped | 4 | **0** | 0 | **met** |
 
-**Reading this honestly:** recall 0.533 at precision 0.800 is the expected shape of a
-structural-only scorer. When it fires it is usually right; it misses more than half of what
-a reviewer should catch. Every miss lives in SQL semantics — join grain, an incremental
+Confusion at the MEDIUM+ threshold: TP=10, FP=1, FN=7, TN=12 (day 3: TP=8, FP=2, FN=7,
+TN=9).
+
+| Category | n | Errored | Exact match | Day-3 rate | Day-7 rate |
+|---|---|---|---|---|---|
+| breaking | 10 | 0 | 3 | 0.375 | 0.300 |
+| should_pass | 10 | 0 | 10 | 0.800 | **1.000** |
+| subtle | 10 | 0 | 4 | 0.375 | 0.400 |
+
+Note the denominator: day 3 scored 26 fixtures because 4 were excluded as errors, day 7
+scores all 30. The breaking rate *falls* because two previously-excluded fixtures are now
+scored and still wrong. That is the honest direction; keeping them excluded to protect the
+number was never an option. Full analysis in
+[../evals/RESULTS_V2.md](../evals/RESULTS_V2.md).
+
+**Reading this honestly:** recall 0.588 at precision 0.909 is the expected shape of a
+structural-only scorer. When it fires it is almost always right; it still misses about 40%
+of what a reviewer should catch. Every miss lives in SQL semantics — join grain, an incremental
 predicate, a dropped `distinct` — that no amount of graph traversal reveals. That gap is
 the argument for the agent, and it was quantified before the agent existed so the
 comparison cannot be retrofitted.
@@ -143,7 +154,14 @@ Every failure of the deterministic core, categorised. Counts are exact.
 
 ### Top 3 failure modes, with numbers
 
-**1. YAML attribution drops the node entirely — 4 fixtures, 2 of them HIGH.**
+This taxonomy is the **day-3** analysis, kept as written. Modes 1 and 2 were fixed in the
+day-7 iteration round and are marked below; mode 3 stands. Rewriting them in place would
+erase the record of what the eval suite actually caught, which is the point of having one.
+
+**1. YAML attribution drops the node entirely — 4 fixtures, 2 of them HIGH.** — **FIXED
+(day 7).** Now 0 dropped fixtures. Where a shared schema.yml makes the owning model
+unprovable, the column is reported as an explicit medium uncertainty instead of being
+attributed or dropped.
 
 `b03`, `b06`, `s03` edit `models/marts/schema.yml`; `s04` edits `models/exposures.yml`. All
 four resolve to a file, match real nodes, and are then discarded.
@@ -164,7 +182,8 @@ a wrong severity — no output. This is the worst failure shape in the project, 
 silence reads as approval. It also suppresses the retrieval metric, since a node that does
 not resolve cannot have rules retrieved for it.
 
-**2. Any column-set delta triggers severity — 2 false positives, FPR 0.200.**
+**2. Any column-set delta triggers severity — 2 false positives, FPR 0.200.** — **FIXED
+(day 7).** Added columns are no longer structural; FPR is now 0.000.
 
 `p10_additive_column` adds `loaded_at` to `stg_orders` and scores HIGH.
 `p03_test_added` adds a `not_null` test and scores HIGH.
@@ -178,7 +197,8 @@ new column.
 At 0.200, one routine PR in five gets a HIGH. That is mute-the-bot territory, and it is the
 metric most likely to decide the tool's fate in real use.
 
-**3. SQL semantics are invisible to regex extraction — 5 false negatives.**
+**3. SQL semantics are invisible to regex extraction — 5 false negatives.** — **STANDS.**
+Unchanged by day 7 and the clearest remaining argument for the agent.
 
 | Fixture | Expected | Actual | Why |
 |---|---|---|---|
@@ -235,11 +255,10 @@ Stated plainly. The ones that look bad are the ones most worth stating.
 
 | Limitation | Honest impact |
 |---|---|
-| **4 fixtures produce no output at all** | A dropped contract column is invisible. Silence reads as approval. |
-| **FPR is 2x target** | One routine PR in five gets a HIGH |
 | **Agent unmeasured** | No evidence the LLM improves on the baseline |
 | **Never deployed** | No real PR has received a comment |
-| Recall 0.533 | Misses over half of what a reviewer should catch |
+| Recall 0.588 | Misses about 40% of what a reviewer should catch |
+| A removed column in a shared schema.yml has no provable owner | Reported as an explicit medium uncertainty; sole remaining false positive (`s03`) |
 | Correct silence 0.455 | 6 of 11 no-rule fixtures draw a spurious rule |
 | Model-level lineage only | Names 12 downstream models, not which use the column |
 | Lexical retrieval | Cannot match a paraphrase |
@@ -268,14 +287,21 @@ recorded here — so this document cannot silently go stale.
 
 ## Conclusion
 
-The deterministic core does what it claims: precision 0.800, and it does not flag
-whitespace. Recall 0.533 means it is a useful second pair of eyes, not a safety net, and
+The deterministic core does what it claims: precision 0.909, and it does not flag
+whitespace. Recall 0.588 means it is a useful second pair of eyes, not a safety net, and
 the report says so.
 
-**An honest 0.533 with a failure taxonomy is a stronger signal than an unverifiable 0.95.**
-The two top failure modes are diagnosed to the specific predicate, and both were left
-unfixed on purpose: day 6 measures, day 7 fixes, and doing both in one session destroys the
-before/after comparison that makes the fix demonstrable.
+**An honest 0.588 with a failure taxonomy is a stronger signal than an unverifiable 0.95.**
+The two top failure modes were diagnosed to the specific predicate on day 3, left unfixed
+on purpose, and fixed on day 7 — measuring and fixing in one session destroys the
+before/after comparison that makes the fix demonstrable. That separation is what lets this
+report state a delta (FPR 0.200 → 0.000, silent drops 4 → 0) rather than only a number.
+
+The day-7 round also cost something, and the report names it: fixing the dropped-node
+defect introduced one false positive (`s03`), because a removed column in a shared
+schema.yml has no provable owner. Trading four silent drops for one over-cautious medium
+warning is the right side of that trade, and it is visible in the numbers rather than
+buried.
 
 What this project does not have is a measured agent or a live deployment. Both are stated
 here, in the README, and in the PRD, rather than described as in progress.

@@ -210,7 +210,22 @@ def render(outcomes: list[Outcome], summary: dict) -> str:
     return "\n".join(lines)
 
 
+
+def _force_utf8_stdout() -> None:
+    """Windows consoles default to cp1252, which cannot encode the arrows in the tables.
+
+    Without this, `python -m evals.checks_eval` dies with a UnicodeEncodeError on a
+    stock Windows clone and the published numbers cannot be reproduced there at all.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8")
+            except (ValueError, OSError):
+                pass
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_stdout()
     parser = argparse.ArgumentParser(prog="evals.runner")
     parser.add_argument("--json", dest="json_path", default=str(EVALS / "results.json"))
     parser.add_argument("--only", choices=["breaking", "should_pass", "subtle"])

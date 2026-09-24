@@ -21,11 +21,26 @@ rather than merely deferred.
 - **`--since` git integration** so the tool computes its own diff from a base ref
   instead of being handed one.
 
-## Found by the day-3 eval baseline, deferred to day 7
+- **Per-model hunk attribution in a shared schema.yml.** Created by the day-7 fix. When
+  a hunk opens inside a `columns:` list, the owning model is not in the diff, so a
+  removed column in a file documenting two models cannot be pinned to one of them. It
+  is surfaced as an explicit medium-severity uncertainty rather than attributed to both
+  (which would recreate the day-2 false positive) or dropped (the day-3 defect). This is
+  the sole remaining false positive, `s03_contract_widened_safely`. Closing it needs the
+  hunk's `@@` offsets plus a read of the base-branch file — the same offset parsing the
+  inline-comments entry below is waiting on.
 
-Both are measured and documented in `evals/BASELINE.md`. Day 6 measures, day 7 fixes the
-top two failure modes — these are the current candidates, and they are parked here rather
-than fixed on sight so the before/after comparison survives.
+## Found by the day-3 eval baseline — FIXED on day 7
+
+Both were measured in `evals/BASELINE.md` and fixed in the day-7 iteration round. The
+before/after is in `evals/RESULTS_V2.md`: precision 0.800 -> 0.909, recall 0.533 ->
+0.588, FPR 0.200 -> **0.000**, silently dropped fixtures 4 -> **0**.
+
+Kept here rather than deleted because the entries record why they were parked instead of
+fixed on sight, which is the part of the process worth showing. One new item the fix
+created is in the deferred list below: per-model hunk attribution in a shared schema.yml.
+
+~~The two deferred failure modes:~~
 
 - **YAML column attribution drops the node entirely.** `yaml_columns_by_model` only
   tracks `- name:` under a `columns:` key, so a `data_type:` edit on a contracted model

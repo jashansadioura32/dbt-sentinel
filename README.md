@@ -145,29 +145,35 @@ a 400 fails immediately, because sending it again will not make it a 200.
 
 ## Published results
 
-Full detail in [evals/BASELINE.md](evals/BASELINE.md). 30 labelled fixtures, 10 breaking /
+Day-3 baseline in [evals/BASELINE.md](evals/BASELINE.md), day-7 before/after in
+[evals/RESULTS_V2.md](evals/RESULTS_V2.md). 30 labelled fixtures, 10 breaking /
 10 should-pass / 10 subtle, run against a real manifest compiled by dbt 1.12.4.
 
-**Deterministic core, no LLM:**
+**Deterministic core, no LLM** (day 7, after one iteration round):
 
-| Metric | Value |
-|---|---|
-| Precision | 0.800 |
-| Recall | 0.533 |
-| False-positive rate (should-pass block) | 0.200 |
-| Fixtures silently dropped | 4 |
+| Metric | Day 3 | **Current** |
+|---|---|---|
+| Precision | 0.800 | **0.909** |
+| Recall | 0.533 | **0.588** |
+| False-positive rate (should-pass block) | 0.200 | **0.000** |
+| Fixtures silently dropped | 4 | **0** |
 
 **Policy retrieval, measured separately** so a retrieval miss is distinguishable from a
 reasoning error:
 
-| Metric | Value |
-|---|---|
-| Precision@3 | 0.708 |
-| Recall@3 | 0.630 |
-| Correct silence on no-rule fixtures | 0.455 |
+| Metric | Day 4 | **Current** |
+|---|---|---|
+| Precision@3 | 0.708 | 0.636 |
+| Recall@3 | 0.630 | **0.778** |
+| Correct silence on no-rule fixtures | 0.455 | 0.455 |
 
-Recall of 0.533 at precision 0.800 is the honest shape of a structural-only scorer: when it
-fires it is usually right, and it misses more than half of what a reviewer should catch.
+Retrieval precision@3 fell because three fixtures that previously resolved to no node now
+reach the retriever at all — recall rose on the same change. A metric that improves by
+keeping fixtures out of the denominator is one this project publishes against, not for.
+
+Recall of 0.588 at precision 0.909 is the honest shape of a structural-only scorer: when it
+fires it is almost always right, and it still misses about 40% of what a reviewer should
+catch.
 Every miss lives in SQL semantics — join grain, an incremental predicate, a dropped
 `distinct` — that no amount of graph traversal reveals. That gap is the argument for the
 agent, and it was quantified *before* the agent existed so the comparison cannot be
@@ -217,8 +223,7 @@ Documented rather than hidden. The ones that look bad are the ones most worth st
 
 | Limitation | Impact |
 |---|---|
-| **4 fixtures resolve to zero nodes** | A `data_type` edit on a contracted model or an `owner:` edit on an exposure is silently dropped — no severity, no warning. Two are HIGH. Worst failure shape in the project. |
-| **Additive columns score as breaking** | Adding a column scores the same HIGH as renaming one, driving the 0.200 false-positive rate. The tool reacts to *a column set changed*, not *a column removed*. |
+| **A removed column in a shared schema.yml cannot be pinned to one model** | When the hunk shows no model heading, the tool reports an explicit medium-severity uncertainty naming the column and file, rather than guessing an owner or staying silent. Sole remaining false positive (`s03`). |
 | Column extraction is regex, not a parser | Misses `select *`, CTE aliases, macro-generated columns |
 | Lexical retrieval cannot match a paraphrase | A diff saying `* 1.1` never matches a rule whose vocabulary is `full_refresh` |
 | Macro changes don't resolve to models | Surfaced as a warning, not resolved |

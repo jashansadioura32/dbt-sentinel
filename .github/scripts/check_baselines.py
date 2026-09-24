@@ -6,8 +6,13 @@ published. The point is that `evals/BASELINE.md` states figures a reader will tr
 a change that silently invalidates them must not merge. If a number moves legitimately,
 update the floor here *and* the document in the same commit, so the two cannot drift.
 
-Floors are set at the measured day-3/day-4 values. Metrics where lower is better are
-ceilings instead.
+Floors are set at the measured values: day-3/day-4 for retrieval and the check layer,
+day-7 for severity after the two deferred failure modes were fixed. Metrics where lower
+is better are ceilings instead.
+
+The severity floors ratcheted on day 7 (precision 0.800 -> 0.909, recall 0.533 -> 0.588,
+FPR 0.200 -> 0.000, dropped fixtures 4 -> 0). Ratcheting is the point: the old floors
+would now pass while the tool silently regressed back to the day-3 behaviour.
 """
 
 from __future__ import annotations
@@ -20,34 +25,39 @@ REPO = Path(__file__).resolve().parents[2]
 
 # (file, dotted path, comparison, threshold, what it is)
 CHECKS: list[tuple[str, str, str, float, str]] = [
-    ("evals/results.json", "summary.precision", ">=", 0.800, "severity precision"),
-    ("evals/results.json", "summary.recall", ">=", 0.533, "severity recall"),
+    ("evals/results.json", "summary.precision", ">=", 0.909, "severity precision"),
+    ("evals/results.json", "summary.recall", ">=", 0.588, "severity recall"),
     (
         "evals/results.json",
         "summary.false_positive_rate_should_pass",
         "<=",
-        0.200,
+        0.000,
         "false-positive rate on should-pass fixtures",
     ),
     (
         "evals/results.json",
         "summary.n_errored",
         "<=",
-        4,
+        0,
         "fixtures silently dropped",
     ),
     (
         "evals/retrieval_results.json",
+        # Dropped from 0.708 on day 7, and the fall is an improvement. The 4 fixtures
+        # that used to resolve to no node now reach the retriever, so each returns 3
+        # rules with 1-2 correct where it previously returned nothing. Recall rose
+        # 0.630 -> 0.778 on the same change. Precision@3 fell because the denominator
+        # grew, not because retrieval got worse.
         "summary.precision_at_k",
         ">=",
-        0.708,
+        0.636,
         "retrieval precision@3",
     ),
     (
         "evals/retrieval_results.json",
         "summary.recall_at_k",
         ">=",
-        0.630,
+        0.778,
         "retrieval recall@3",
     ),
     (
