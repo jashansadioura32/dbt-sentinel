@@ -73,7 +73,20 @@ def build_app_jwt(app_id: str, private_key_pem: str, now: int | None = None) -> 
         + _b64url(json.dumps(payload, separators=(",", ":")).encode())
     ).encode("ascii")
 
-    key = serialization.load_pem_private_key(private_key_pem.encode(), password=None)
+    try:
+        key = serialization.load_pem_private_key(private_key_pem.encode(), password=None)
+    except (ValueError, TypeError) as exc:
+        # `cryptography` raises ValueError, which is not a GitHubError, so an unhandled
+        # one reached FastAPI as a bare text/plain 500 — the least debuggable failure a
+        # webhook can return. A mangled key is the normal case here, not an exotic one:
+        # hosts routinely flatten the newlines out of a multi-line secret.
+        raise GitHubError(
+            "GITHUB_PRIVATE_KEY is not a readable PEM key "
+            f"({type(exc).__name__}: {exc}). This is usually a multi-line secret whose "
+            "newlines were flattened by the host. Re-set it as base64 of the whole .pem "
+            "file — `base64 -w0 your-app.private-key.pem` — which this loader decodes "
+            "automatically, or mount the file and set GITHUB_PRIVATE_KEY_PATH instead."
+        ) from exc
     signature = key.sign(signing_input, padding.PKCS1v15(), hashes.SHA256())
     return signing_input.decode("ascii") + "." + _b64url(signature)
 

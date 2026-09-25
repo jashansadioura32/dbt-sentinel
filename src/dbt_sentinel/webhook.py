@@ -111,6 +111,17 @@ def run_review(summary: dict[str, Any], installation_id: int, client: Any = None
     except GitHubError as exc:
         logger.error("app auth failed: %s", exc)
         return {"ok": False, "pipeline_ran": False, "error": str(exc)}
+    except Exception as exc:  # noqa: BLE001 - see the docstring; 500 triggers retries
+        # The docstring promised a broad except and this clause is what delivers it.
+        # Anything a dependency raises that is not a GitHubError — a malformed key, a
+        # socket error — previously escaped as an unhandled 500, which GitHub answers
+        # by redelivering the same payload repeatedly.
+        logger.exception("app auth crashed")
+        return {
+            "ok": False,
+            "pipeline_ran": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
     try:
         github.set_commit_status(pr, "pending", "Reviewing dbt changes...")

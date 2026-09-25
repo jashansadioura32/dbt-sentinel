@@ -134,6 +134,8 @@ deleted model's blast radius is computed against a graph the deletion already le
 
 | Symptom | Cause |
 |---|---|
+| Delivery 500 with a plain-text body | `GITHUB_PRIVATE_KEY` is not a readable PEM — usually a multi-line secret the host flattened. Set it as `base64 -w0 your-app.private-key.pem`. The response now names this instead of returning a bare 500 |
+| Delivery 401 `missing X-Hub-Signature-256` | The **App's** Webhook secret field is empty, so GitHub signs nothing. The field is labelled optional and is easy to skip; it must match `GITHUB_WEBHOOK_SECRET` exactly |
 | Every delivery 422 | Was a real bug, fixed: `Request` resolved to a query parameter under `from __future__ import annotations`, so nothing reached the signature check. Pinned by `tests/test_webhook_http.py` |
 | Every delivery 401 | `GITHUB_WEBHOOK_SECRET` differs from the App's |
 | Every delivery 500 | Secret not set at all — `/health` shows `secret_configured: false` |

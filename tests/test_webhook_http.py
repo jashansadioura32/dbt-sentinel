@@ -150,3 +150,74 @@ def test_health_reports_a_missing_secret(monkeypatch):
     monkeypatch.delenv("GITHUB_WEBHOOK_SECRET", raising=False)
     client = fastapi_testclient.TestClient(create_app())
     assert client.get("/health").json()["secret_configured"] is False
+
+
+# ---------- a malformed private key must not become a bare 500 ----------
+
+
+def test_a_mangled_private_key_returns_json_not_a_bare_500(monkeypatch):
+    """Found on a live deployment. Railway flattened the .pem's newlines, and the
+    ValueError from `cryptography` was not a GitHubError, so it escaped `run_review`
+    and FastAPI answered with a text/plain "Internal Server Error".
+
+    Two reasons that is the worst possible response: it names nothing an operator can
+    act on, and GitHub answers a 500 by redelivering the same payload repeatedly.
+    """
+    from dbt_sentinel.webhook import run_review
+
+    monkeypatch.setenv("GITHUB_APP_ID", "123456")
+    monkeypatch.setenv(
+        "GITHUB_PRIVATE_KEY",
+        "-----BEGIN RSA PRIVATE KEY-----\nNOTAREALKEY\n-----END RSA PRIVATE KEY-----",
+    )
+    summary = {
+        "repo": "owner/repo",
+        "pr_number": 1,
+        "head_sha": "abc123",
+        "base_ref": "main",
+        "event": "pull_request",
+        "action": "synchronize",
+        "actionable": True,
+    }
+
+    result = run_review(summary, 164833930)
+
+    assert result["ok"] is False
+    assert result["pipeline_ran"] is False
+    assert "GITHUB_PRIVATE_KEY" in result["error"]
+
+
+def test_the_key_error_tells_the_operator_what_to_do(monkeypatch):
+    """Error messages say what to do next, not only what went wrong."""
+    from dbt_sentinel.github import GitHubError, build_app_jwt
+
+    with pytest.raises(GitHubError) as caught:
+        build_app_jwt("123456", "not a pem at all")
+
+    message = str(caught.value)
+    assert "base64" in message
+    assert "GITHUB_PRIVATE_KEY_PATH" in message
+
+
+def test_run_review_never_raises_on_an_unexpected_auth_failure(monkeypatch):
+    """The broad except the docstring promises. A raise here means a retry storm."""
+    import dbt_sentinel.webhook as wh
+    from dbt_sentinel import github as gh
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("socket exploded")
+
+    monkeypatch.setattr(gh.GitHubClient, "for_installation", classmethod(boom))
+    summary = {
+        "repo": "owner/repo",
+        "pr_number": 1,
+        "head_sha": "abc",
+        "base_ref": "main",
+        "event": "pull_request",
+        "action": "synchronize",
+        "actionable": True,
+    }
+
+    result = wh.run_review(summary, 1)
+    assert result["ok"] is False
+    assert "RuntimeError" in result["error"]
