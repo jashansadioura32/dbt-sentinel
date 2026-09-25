@@ -221,3 +221,75 @@ def test_run_review_never_raises_on_an_unexpected_auth_failure(monkeypatch):
     result = wh.run_review(summary, 1)
     assert result["ok"] is False
     assert "RuntimeError" in result["error"]
+
+
+# ---------- the JWT's `iss` claim must be a number ----------
+
+
+def _throwaway_pem() -> str:
+    """A real 2048-bit key generated per call; never a committed secret."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    return key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode()
+
+
+def test_the_iss_claim_is_an_integer_not_a_string():
+    """Found against the live API. GitHub answered every installation-token request
+    with `401 'Issuer' claim ('iss') must be an Integer`.
+
+    The App ID arrives from an environment variable, so it is a str, and
+    `{"iss": app_id}` serialised it as a JSON string. The signature is valid either
+    way and the token has three well-formed segments, so no local check on the JWT's
+    shape catches this — only GitHub's claim validation does. Hence an assertion on
+    the decoded claim type rather than on the token.
+    """
+    import base64
+    import json as _json
+
+    from dbt_sentinel.github import build_app_jwt
+
+    token = build_app_jwt("5071196", _throwaway_pem())
+    claims = _json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
+
+    assert isinstance(claims["iss"], int), f"iss is {type(claims['iss']).__name__}"
+    assert claims["iss"] == 5071196
+
+
+def test_a_non_numeric_app_id_is_rejected_with_a_useful_message():
+    """Pasting the App *name* or Client ID into GITHUB_APP_ID is the likely mistake,
+    and it must not surface as an opaque 401 from GitHub."""
+    from dbt_sentinel.github import GitHubError, build_app_jwt
+
+    with pytest.raises(GitHubError, match="numeric ID"):
+        build_app_jwt("dbt-sentinal", _throwaway_pem())
+
+
+def test_an_app_id_with_stray_whitespace_still_works():
+    """Copy-paste from a settings page picks up a trailing newline or space."""
+    import base64
+    import json as _json
+
+    from dbt_sentinel.github import build_app_jwt
+
+    token = build_app_jwt("  5071196\n", _throwaway_pem())
+    claims = _json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
+    assert claims["iss"] == 5071196
+
+
+def test_the_jwt_ttl_stays_inside_githubs_ten_minute_cap():
+    """GitHub rejects a token whose exp is more than 10 minutes out, clock skew
+    included. The margin is what makes the skew allowance safe."""
+    import base64
+    import json as _json
+
+    from dbt_sentinel.github import build_app_jwt
+
+    token = build_app_jwt("5071196", _throwaway_pem())
+    claims = _json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))
+    assert 0 < claims["exp"] - claims["iat"] <= 600

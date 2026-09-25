@@ -65,7 +65,20 @@ def build_app_jwt(app_id: str, private_key_pem: str, now: int | None = None) -> 
 
     issued = int(now if now is not None else time.time()) - _JWT_CLOCK_SKEW_S
     header = {"alg": "RS256", "typ": "JWT"}
-    payload = {"iat": issued, "exp": issued + _JWT_TTL_S, "iss": app_id}
+    # `iss` must be a JSON number, not a string: GitHub rejects the token outright with
+    # `401 'Issuer' claim ('iss') must be an Integer`. The App ID arrives as a str
+    # because it comes from an environment variable, and the signature is valid either
+    # way — only GitHub's claim validation catches it, so no amount of local JWT
+    # checking finds this.
+    try:
+        issuer: int | str = int(str(app_id).strip())
+    except ValueError as exc:
+        raise GitHubError(
+            f"GITHUB_APP_ID must be the App's numeric ID, but is {app_id!r}. Find it on "
+            "the App's settings page under 'App ID' — it is a number, not the App name "
+            "or the Client ID."
+        ) from exc
+    payload = {"iat": issued, "exp": issued + _JWT_TTL_S, "iss": issuer}
 
     signing_input = (
         _b64url(json.dumps(header, separators=(",", ":")).encode())

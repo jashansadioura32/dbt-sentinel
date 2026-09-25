@@ -415,7 +415,13 @@ def test_jwt_has_three_segments_and_backdated_iat():
     payload = _decode(segments[1])
     # GitHub rejects a JWT whose iat is even a second in the future.
     assert payload["iat"] < 1_000_000
-    assert payload["iss"] == "12345"
+    # An int, not "12345": GitHub rejects a string issuer with
+    # `401 'Issuer' claim ('iss') must be an Integer`. This assertion previously
+    # required the string and so pinned the bug in place — the JWT was well formed
+    # and correctly signed, which is all the rest of this test checks, and the fault
+    # was invisible until the real API refused the token.
+    assert payload["iss"] == 12345
+    assert isinstance(payload["iss"], int)
     assert payload["exp"] > payload["iat"]
 
 
