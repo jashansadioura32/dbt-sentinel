@@ -3,7 +3,12 @@ name = "dbt-sentinel"
 version = "0.2.0"
 description = "Blast-radius review for dbt pull requests"
 requires-python = ">=3.10"
-license = { file = "LICENSE" }
+# SPDX expression rather than `{ file = "LICENSE" }`: the file form makes the build hard
+# -fail with `OSError: License file does not exist` whenever the build context omits the
+# file, which is exactly what Railway's Nixpacks upload does. The license did not change;
+# the build simply no longer depends on that file being present to compute metadata.
+license = "MIT"
+license-files = ["LICENSE"]
 # pyyaml is the only runtime dependency: the day-4 policy pack is YAML, and retrieval
 # is part of the core deterministic path rather than an LLM add-on. Retrieval itself is
 # stdlib-only (TF-IDF over the rule pack) specifically to avoid an embeddings dependency

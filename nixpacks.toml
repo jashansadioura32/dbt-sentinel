@@ -1,0 +1,27 @@
+# Nixpacks build config for Railway.
+#
+# Why this exists rather than relying on railway.json's `buildCommand`: the observed
+# build ran plain `pip install .`, which installs only the base dependency (pyyaml) and
+# none of the extras. The server would then fail to start on a missing fastapi, after a
+# build that reported success — the worst shape of deploy failure. Nixpacks reads the
+# phases here directly, so the extras are not optional.
+#
+# `[server]` is what the webhook needs: fastapi, uvicorn, and cryptography for the App
+# JWT's RSA signing. `[agent]` is included so a deployment with an OPENAI_API_KEY can
+# run the reviewer; without a key the review still runs deterministic-only and says so,
+# so this stays a small, always-safe install rather than a conditional one.
+
+[phases.setup]
+nixPkgs = ["python312", "gcc"]
+
+[phases.install]
+cmds = [
+  "python -m venv --copies /opt/venv",
+  ". /opt/venv/bin/activate && pip install --upgrade pip setuptools wheel",
+  ". /opt/venv/bin/activate && pip install -e '.[server,agent]'",
+]
+
+[start]
+# $PORT is injected by the platform. Binding 0.0.0.0 rather than localhost is what makes
+# the container reachable from outside it.
+cmd = "uvicorn dbt_sentinel.webhook:app --host 0.0.0.0 --port $PORT"
