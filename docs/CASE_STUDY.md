@@ -8,8 +8,9 @@ published whatever they say, and the two worst failures are named before the suc
 |---|---|
 | **Repo** | [github.com/jashansadioura32/dbt-sentinel](https://github.com/jashansadioura32/dbt-sentinel) |
 | **Stack** | Python 3.10+, one runtime dependency (`pyyaml`), an LLM (gpt-4o) for judgment only |
-| **Scale** | 12 modules, 130 tests, 30 labelled eval fixtures, 14 governance rules |
-| **Docs** | [PRD](PRD.md) · [Architecture + ADRs](ARCHITECTURE.md) · [Eval report](EVAL_REPORT.md) · [Deployment](DEPLOYMENT.md) |
+| **Scale** | 13 modules, 203 tests, 30 labelled eval fixtures, 14 governance rules |
+| **Status** | Deployed. Posted a correct HIGH review on a real PR on 2026-09-25 |
+| **Docs** | [PRD](PRD.md) · [Architecture + ADRs](ARCHITECTURE.md) · [Eval report](EVAL_REPORT.md) · [Deployment](DEPLOYMENT.md) · [Deployment log](DEPLOYMENT_LOG.md) |
 
 ---
 
@@ -41,18 +42,35 @@ severity, affected models, and a suggested fix. Sets a commit status that blocks
 
 Full detail and methodology in the [eval report](EVAL_REPORT.md).
 
-| Metric | Value | Target |
-|---|---|---|
-| Precision | 0.800 | > 0.75 — met |
-| Recall | 0.533 | > 0.70 — **missed** |
-| False-positive rate on routine PRs | 0.200 | < 0.10 — **missed, 2x** |
-| Retrieval precision@3 | 0.708 | > 0.60 — met |
-| Agent vs. baseline | **unmeasured** | needs an API key |
-| Deployed to a real PR | **not done** | wired, never deployed |
+Measured twice: at day 3 before any fix, and at day 7 after one iteration round against
+the two failure modes day 3 named. Both are shown, because the delta is the evidence that
+the eval suite drove the fix rather than ratifying it.
 
-Two of six targets missed, two unmeasured, one deliverable incomplete. Recall 0.533 at
-precision 0.800 is the honest shape of a structural-only scorer: when it fires it is
-usually right, and it misses more than half of what a reviewer should catch.
+| Metric | Day 3 | **Day 7** | Target |
+|---|---|---|---|
+| Precision | 0.800 | **0.909** | > 0.75 — met |
+| Recall | 0.533 | **0.588** | > 0.70 — **missed** |
+| False-positive rate on routine PRs | 0.200 | **0.000** | < 0.10 — met |
+| Fixtures silently dropped | 4 | **0** | 0 — met |
+| Retrieval precision@3 | 0.708 | 0.636 | > 0.60 — met |
+| Retrieval recall@3 | 0.630 | **0.778** | — |
+| Agent vs. baseline | unmeasured | **unmeasured** | needs API credits |
+| Deployed to a real PR | not done | **done** | [log](DEPLOYMENT_LOG.md) |
+
+Recall 0.588 at precision 0.909 is the honest shape of a structural-only scorer: when it
+fires it is almost always right, and it still misses about 40% of what a reviewer should
+catch. Every miss lives in SQL semantics — join grain, an incremental predicate, a dropped
+`distinct` — that graph traversal cannot reveal. That gap is the argument for the agent,
+and it is quantified *after* the deterministic core was fixed rather than before.
+
+Retrieval precision@3 fell while recall rose, on the same change: three fixtures that used
+to resolve to no node now reach the retriever at all, so the denominator grew. A metric
+that improves by keeping fixtures out of the denominator is one this project publishes
+against, not for.
+
+The one remaining false positive is argued in [RESULTS_V2.md](../evals/RESULTS_V2.md): a
+removed column in a shared `schema.yml` has no provable owner, so it is reported as an
+explicit medium-severity uncertainty rather than attributed to both models or dropped.
 
 ## Four decisions worth defending
 
@@ -120,27 +138,59 @@ is now failure mode #1.
 project: every later scope argument resolved by pointing at it, and the rejected ideas went
 to `ROADMAP.md` instead of into the build.
 
-## The two worst failures
+## The two worst failures — found on day 3, fixed on day 7
 
-Named here rather than left for a reader to find.
+Named here rather than left for a reader to find. Both were measured and deliberately left
+unfixed for a session, so the before/after would be demonstrable rather than asserted.
+The delta is in the results table above; the analysis is in
+[RESULTS_V2.md](../evals/RESULTS_V2.md).
 
-**A dropped contract column produces no output at all.** Four fixtures resolve to a file,
+**A dropped contract column produced no output at all.** Four fixtures resolve to a file,
 match real nodes, then get discarded because the YAML attribution only tracks `- name:`
 under a `columns:` key. Two are HIGH. Silence reads as approval, which makes this the worst
 failure shape available.
 
-**Additive columns score as breaking.** `is_structural` counts added columns alongside
-removed ones, so adding `loaded_at` scores the same HIGH as renaming `customer_id` — same
-model, same reach, opposite semantics. This drives the 0.200 FPR, one routine PR in five.
+**Additive columns scored as breaking.** `is_structural` counted added columns alongside
+removed ones, so adding `loaded_at` scored the same HIGH as renaming `customer_id` — same
+model, same reach, opposite semantics. This drove the whole 0.200 FPR, one routine PR in
+five. Adding a column breaks no consumer: `select *` picks it up, an explicit select
+ignores it. Fixed by removing added columns from the structural trigger; the should-pass
+block went 8/10 to 10/10 and the FPR to 0.000.
+
+## What the deployment caught
+
+The GitHub App was built and tested against a fake client, and shipping it to Railway
+surfaced four bugs that every one of 196 local tests had passed. Full record in the
+[deployment log](DEPLOYMENT_LOG.md); two are worth naming here.
+
+**The webhook rejected 100% of deliveries with 422.** `from __future__ import annotations`
+turned the handler's annotations into strings, and FastAPI resolves those against module
+globals — but `Request` was imported inside the app factory, so it bound `request` as a
+query parameter. Every delivery failed validation before the signature check. No test
+caught it because every webhook test called the handler directly; none started the HTTP
+layer.
+
+**An existing test asserted the bug that broke App authentication.** GitHub rejected every
+installation token with `401 'Issuer' claim ('iss') must be an Integer` — the App ID comes
+from an environment variable, so it was a `str`. The JWT was well formed and correctly
+signed, which is all a local check can see, and
+`test_jwt_has_three_segments_and_backdated_iat` asserted `iss == "12345"`. A real test that
+passed for four days while pinning the fault in place.
+
+Both are the same shape: **a test that constructs both sides of an interface cannot
+discover that the real other side disagrees.**
 
 ## What is incomplete
 
-- **The agent is unmeasured.** Its plumbing has 31 tests, all against a fake client. Review
-  quality is unknown. One command and an API key would close it.
-- **Never deployed.** The GitHub App is built and tested against a fake client; no real PR
-  has received a comment.
-- **Days 6 and 7 not run.** The comparison harness exists; the measurement and the one
-  iteration round did not happen.
+- **The agent has never made a real API call.** Its plumbing has 31 tests, all against a
+  fake client — and the two bugs above are what that kind of coverage misses. Review
+  quality is unknown. Blocked on OpenAI credits, not on code.
+- **`evals/RESULTS_V1.md` does not exist.** The agent-vs-baseline comparison needs the same
+  credits. `evals/compare.py` exits 2 and writes nothing rather than publish a fabricated
+  arm — including when a key is present but its balance is zero, which is how that guard
+  was found.
+- **CI-artifact manifest download is unimplemented.** The committed manifest works, and the
+  comment discloses that it may be stale.
 
 ## If I did it again
 
@@ -154,3 +204,10 @@ authored to match your own assertions is the most self-confirming thing in a pro
 **I under-weighted the cost of an optional dependency.** Deferring the API key to "later"
 left two days unfinishable and one of four documents with a hole in it. The dependency was
 not the code — it was the credential.
+
+**A fake client proves plumbing, and I read it as proving integration.** The agent's
+degradation paths and the GitHub client both had thorough fake-client coverage, and both
+had total faults underneath it — a webhook that rejected every delivery, a JWT GitHub
+would never accept. The tests were not wrong about what they tested. I was wrong about
+what that covered. Deploying on day 1 with a stub handler would have cost an hour and
+found bugs 2 and 4 immediately.

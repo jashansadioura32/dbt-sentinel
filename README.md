@@ -212,8 +212,16 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). It covers App creation, the four r
 permissions needed, private-key handling on hosts that mangle multi-line secrets, and a
 troubleshooting table keyed by symptom. `Procfile` and `railway.json` are included.
 
-**Not yet deployed.** The wiring is built and tested against a fake GitHub client; no real
-PR has received a comment.
+**Deployed.** On 2026-09-25 the App posted a correct HIGH-severity review on a real PR in
+[jashansadioura32/jeffle-shop](https://github.com/jashansadioura32/jeffle-shop) and set a
+failing commit status, in 6.5s. The OpenAI account had no credits, so the reviewer agent
+degraded and the comment says so explicitly — design rule 5 on real infrastructure rather
+than asserted in a doc.
+
+Shipping it found four bugs that all 196 local tests had passed, including a webhook that
+rejected 100% of deliveries and a JWT claim GitHub would never accept. Both are recorded
+in [docs/DEPLOYMENT_LOG.md](docs/DEPLOYMENT_LOG.md), along with the existing test that
+asserted one of them.
 
 ---
 
@@ -256,6 +264,8 @@ before/after comparison. They are parked in [ROADMAP.md](ROADMAP.md).
 | [docs/EVAL_REPORT.md](docs/EVAL_REPORT.md) | Methodology, metrics, failure taxonomy, limitations |
 | [docs/CASE_STUDY.md](docs/CASE_STUDY.md) | The build as a narrative: decisions, defects found, what I would redo |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | GitHub App setup, permissions, secrets, troubleshooting |
+| [docs/DEPLOYMENT_LOG.md](docs/DEPLOYMENT_LOG.md) | The first live review, and the four bugs only real infrastructure found |
+| [evals/RESULTS_V2.md](evals/RESULTS_V2.md) | Day-7 iteration round: before/after on the two deferred failure modes |
 | [ROADMAP.md](ROADMAP.md) | Out-of-scope parking lot and deferred fixes |
 
 ---
