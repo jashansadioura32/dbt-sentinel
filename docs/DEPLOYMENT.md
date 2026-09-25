@@ -62,6 +62,19 @@ A `Procfile` and `railway.json` are included. On Railway: new project → deploy
 → add the variables above. Fly and Render work the same way.
 
 Verify: `curl https://<your-deployment>/health` → `{"ok": true, "secret_configured": true}`.
+
+Then verify the endpoint accepts a signed delivery, which `/health` does not prove:
+
+```bash
+BODY='{"action":"opened"}'
+SIG=$(python -m dbt_sentinel.webhook --sign "$BODY" --secret "$GITHUB_WEBHOOK_SECRET")
+curl -s -o /dev/null -w '%{http_code}
+' -X POST https://<your-deployment>/webhook   -H "X-GitHub-Event: pull_request" -H "X-Hub-Signature-256: $SIG" -d "$BODY"
+```
+
+**200** is correct (the stub payload has no installation id, so the body reports that
+and no review runs). **401** means the secret differs, **500** means none reached the
+process, and **422** means the handler is not binding the request body at all.
 If `secret_configured` is false, the secret did not reach the process and **every
 delivery will 500** — fix that before redelivering.
 
@@ -121,6 +134,7 @@ deleted model's blast radius is computed against a graph the deletion already le
 
 | Symptom | Cause |
 |---|---|
+| Every delivery 422 | Was a real bug, fixed: `Request` resolved to a query parameter under `from __future__ import annotations`, so nothing reached the signature check. Pinned by `tests/test_webhook_http.py` |
 | Every delivery 401 | `GITHUB_WEBHOOK_SECRET` differs from the App's |
 | Every delivery 500 | Secret not set at all — `/health` shows `secret_configured: false` |
 | 404 fetching the diff | App not installed on that repo, or missing Pull requests permission |

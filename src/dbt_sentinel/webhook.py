@@ -190,8 +190,20 @@ def handle_event(
 
 
 def create_app() -> Any:
-    """Built in a factory so importing this module never requires fastapi."""
+    """Built in a factory so importing this module never requires fastapi.
+
+    `from __future__ import annotations` turns every annotation in this module into a
+    string, and FastAPI resolves those against *module* globals. `Request` is imported
+    inside this function, so it is not there to find: FastAPI fell back to treating
+    `request` as a query parameter and every delivery 422'd before the signature was
+    ever checked. Binding the names into the module namespace below is what makes the
+    lazy import and the string annotations coexist.
+    """
     from fastapi import FastAPI, Header, HTTPException, Request
+
+    # Deliberate, not incidental: the handler's annotations are strings that FastAPI
+    # looks up here. No test caught the 422 because none of them booted the app.
+    globals().setdefault("Request", Request)
 
     app = FastAPI(title="dbt-sentinel webhook", version="0.5.0")
 

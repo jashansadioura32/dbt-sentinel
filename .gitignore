@@ -28,3 +28,11 @@ logs/
 .DS_Store
 .idea/
 .vscode/
+
+# GitHub App credentials. The .pem is downloaded once and cannot be re-downloaded,
+# so it tends to get left in the repo root — where a stray `git add -A` would publish
+# the App's identity to a public repo.
+*.pem
+*.p8
+.env.*
+!.env.example
