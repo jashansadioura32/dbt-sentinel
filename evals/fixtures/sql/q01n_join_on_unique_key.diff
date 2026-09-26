@@ -1,0 +1,24 @@
+diff --git a/models/orders.sql b/models/orders.sql
+index 1111111..2222222 100644
+--- a/models/orders.sql
++++ b/models/orders.sql
+@@ -43,7 +43,8 @@
+ 
+         {% endfor -%}
+ 
+-        order_payments.total_amount as amount
++        order_payments.total_amount as amount,
++        customers.first_name as customer_first_name
+ 
+     from orders
+ 
+@@ -51,6 +52,9 @@
+     left join order_payments
+         on orders.order_id = order_payments.order_id
+ 
++    left join {{ ref('stg_customers') }} as customers
++        on orders.customer_id = customers.customer_id
++
+ )
+ 
+ select * from final

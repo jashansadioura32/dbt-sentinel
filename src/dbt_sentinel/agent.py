@@ -27,7 +27,7 @@ import json
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
@@ -48,6 +48,9 @@ DEFAULT_MODEL = "gpt-4o"
 MAX_TOKENS = 2048
 DEFAULT_TIMEOUT_S = 60.0
 MAX_TOOL_ROUNDS = 6
+# One model's SQL per tool call. A generated 3000-line model would otherwise spend the
+# whole context on one file; 12k chars covers a hand-written model with room to spare.
+MAX_SQL_CHARS = 12_000
 
 Severity = Literal["low", "medium", "high"]
 
@@ -138,6 +141,10 @@ class AgentResult:
     output_tokens: int = 0
     latency_s: float = 0.0
     validation_errors: list[str] = field(default_factory=list)
+    # Rule ids a finding cited that the policy pack doesn't contain. Flagged in the
+    # render rather than dropped: the finding may still be right, but its citation is
+    # not, and a made-up rule id reads as policy to anyone who doesn't check.
+    uncited_rule_ids: list[str] = field(default_factory=list)
 
     @property
     def ran(self) -> bool:
@@ -184,8 +191,24 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "name": "get_columns",
         "description": (
-            "Declared columns and tests for a model, from the manifest. Use to check "
-            "whether a column exists or is tested before asserting either."
+            "Declared columns of a model, the tests on each column (unique, not_null, "
+            "...), and declared data types, from the manifest. Use it before claiming "
+            "a join key is not unique, a column is nullable, or a type is wrong: those "
+            "claims need this evidence."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"model": {"type": "string"}},
+            "required": ["model"],
+        },
+    },
+    {
+        "name": "get_model_sql",
+        "description": (
+            "The full SQL of a model. For a model this PR changes, it is the PR's version "
+            "when available; `source` says which version you got. Use it to judge joins, "
+            "null handling and query shape in context, since the prompt shows only the "
+            "changed lines."
         ),
         "parameters": {
             "type": "object",
@@ -215,9 +238,18 @@ class ToolBox:
     review down for a question that was optional.
     """
 
-    def __init__(self, lineage: Lineage, pack: PolicyPack | None = None):
+    def __init__(
+        self,
+        lineage: Lineage,
+        pack: PolicyPack | None = None,
+        head_source: Callable[[str], str | None] | None = None,
+    ):
         self._lineage = lineage
         self._pack = pack
+        # path -> the PR's version of a file. The manifest is compiled from the base
+        # branch, so its SQL is the code *before* this PR; judging a join from it would
+        # review the old query.
+        self._head_source = head_source
         self.calls: list[tuple[str, dict]] = []
 
     def _find_node_id(self, model: str) -> str | None:
@@ -274,12 +306,45 @@ class ToolBox:
             return {"error": f"no node named {model!r} in the manifest"}
         node = self._lineage.get(uid)
         assert node is not None
+        tests = self._lineage.tests_for(uid)
+        types = dict(node.column_types)
         return {
             "model": model,
-            "columns": list(node.columns),
+            "columns": [
+                {"name": c, "tests": list(tests.get(c, ())), "data_type": types.get(c)}
+                for c in node.columns
+            ],
+            # Composite-key tests (unique_combination_of_columns) attach to no column.
+            "model_tests": list(tests.get("", ())),
             "materialization": node.materialization,
             "is_contracted": node.is_contracted,
             "access": node.access,
+            "note": (
+                "A column absent from `columns` is undocumented, not proven absent. "
+                "`data_type: null` means undeclared, not unknown-and-wrong."
+            ),
+        }
+
+    def get_model_sql(self, model: str) -> dict:
+        uid = self._find_node_id(model)
+        if uid is None:
+            return {"error": f"no node named {model!r} in the manifest"}
+        node = self._lineage.get(uid)
+        assert node is not None
+        if self._head_source is not None and node.path:
+            # A manifest compiled on Windows records `models\staging\x.sql`. The GitHub
+            # contents API 404s on that, which silently fell back to the base SQL.
+            if (head := self._head_source(node.path.replace("\\", "/"))) is not None:
+                return {"model": model, "source": "this PR", "sql": head[:MAX_SQL_CHARS]}
+        if not node.raw_code:
+            return {"error": f"the manifest has no SQL for {model!r}"}
+        return {
+            "model": model,
+            "source": (
+                "base branch (manifest). This is the SQL before the PR; apply the changed "
+                "lines from the prompt before judging it."
+            ),
+            "sql": node.raw_code[:MAX_SQL_CHARS],
         }
 
     def dispatch(self, name: str, payload: dict, changed: ChangedNode | None) -> dict:
@@ -291,6 +356,8 @@ class ToolBox:
                 return self.get_policies(payload.get("change_summary", ""), changed)
             if name == "get_columns":
                 return self.get_columns(payload.get("model", ""))
+            if name == "get_model_sql":
+                return self.get_model_sql(payload.get("model", ""))
             return {"error": f"unknown tool {name!r}"}
         except Exception as exc:  # noqa: BLE001 - a tool must not kill the review
             return {"error": f"{type(exc).__name__}: {exc}"}
@@ -315,11 +382,25 @@ grain change, a contract edit — justifies medium or high. A comment, a whitesp
 an added test or an additive column is low no matter how many consumers it has.
 - An additive change is not a breaking change. SQL ignores columns it does not select.
 - Direction matters on types: widening (integer to bigint) is safe, narrowing is not.
-- Cite only rule_ids returned by get_policies. Do not invent rule_ids.
+- Cite only rule_ids returned by get_policies or listed in the SQL review checklist. \
+Do not invent rule_ids.
 - Use the tools for facts. Do not guess what is downstream of a model or which columns \
 it declares.
 - Report nothing rather than something speculative. An empty findings list is a valid \
 and useful answer for a routine PR.
+
+SQL review. For each changed SQL model, the prompt lists a checklist: join-key \
+uniqueness, null handling, collation, data types, query correctness, SQL security. \
+Apply it to the model's full query (get_model_sql), not only the changed lines, but \
+report only problems this PR introduces or changes. Each checklist rule names the \
+evidence it needs; flag only with that evidence in hand. In particular:
+- Claim a join can duplicate rows only after get_columns shows the joined model's key \
+has no `unique` test and the joined CTE doesn't dedupe it.
+- Claim a column is nullable only if it has no `not_null` test and isn't filtered or \
+coalesced earlier in the query.
+- Claim a type is wrong only from a declared data_type or an explicit cast.
+- Credentials and `= null` comparisons are already caught by deterministic checks. \
+Don't report them.
 
 Return your findings by calling the `submit_findings` tool exactly once, with one entry \
 per distinct issue. Do not write prose outside the tool call — your text is discarded, \
@@ -402,6 +483,9 @@ def build_user_prompt(assessments: list[Assessment], pack: PolicyPack | None) ->
                 ]
             else:
                 lines.append("- retrieved policy rules: none matched")
+            if checklist := pack.checklist(changed):
+                lines.append("- SQL review checklist (apply all, cite by rule_id):")
+                lines += [f"    - {r.rule_id}: {r.title}" for r in checklist]
 
         diff_lines = list(changed.file.added_lines) + list(changed.file.removed_lines)
         if diff_lines:
@@ -452,9 +536,11 @@ class ReviewerAgent:
         model: str = DEFAULT_MODEL,
         timeout_s: float = DEFAULT_TIMEOUT_S,
         sleep: Any = None,
+        head_source: Callable[[str], str | None] | None = None,
     ):
         self._lineage = lineage
         self._pack = pack
+        self._head_source = head_source
         self._model = model
         self._timeout_s = timeout_s
         self._client = client  # injectable so tests never touch the network
@@ -517,7 +603,7 @@ class ReviewerAgent:
                 degraded=True, degradation_reason=str(exc), latency_s=time.monotonic() - started
             )
 
-        toolbox = ToolBox(self._lineage, self._pack)
+        toolbox = ToolBox(self._lineage, self._pack, self._head_source)
         by_name = {a.changed.node.name: a.changed for a in assessments}
         messages: list[dict[str, Any]] = [
             {"role": "user", "content": build_user_prompt(assessments, self._pack)}
@@ -593,6 +679,12 @@ class ReviewerAgent:
                     continue
 
                 result.findings = parsed.findings
+                if self._pack is not None:
+                    result.uncited_rule_ids = sorted({
+                        f.rule_id
+                        for f in parsed.findings
+                        if f.rule_id != "structural" and self._pack.get(f.rule_id) is None
+                    })
                 result.latency_s = time.monotonic() - started
                 return result
 

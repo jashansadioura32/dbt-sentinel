@@ -1,0 +1,174 @@
+# SQL review checklist: judgment about what a query does, applied by the reviewer agent.
+#
+# `applies_as: checklist` means these are never ranked by retrieval. They apply to every
+# SQL change whatever kind of change it is, so the agent gets all of them for every
+# model the prefilter admits. See PolicyPack.__init__ for why they're kept out of the
+# retrieval index entirely.
+#
+# Globs list the top level explicitly (`models/*.sql` beside `models/**/*.sql`):
+# fnmatch's `**/` needs at least one directory, so `models/**/*.sql` alone never matches
+# `models/orders.sql`. The retrieved rules in the other files still have that gap; see
+# ROADMAP.md.
+#
+# What is NOT here, and why: anything a pattern can decide. `= null` is the
+# `null-comparison` check, and exposed credentials are `security.py`. A rule belongs in
+# this file only if applying it needs a reading of the query that no regex can make.
+#
+# Every rule names the evidence the agent must have before it flags. The failure mode
+# these guard against is a reviewer that speculates on every join and gets muted in a
+# week (design rule 2). "Might fan out" is not a finding; "joins on a key with no
+# uniqueness test and no dedup in the CTE" is.
+
+rules:
+  - rule_id: join-key-uniqueness
+    title: Join on a key that is not proven unique
+    severity: high
+    applies_as: checklist
+    applies_to:
+      node_kinds: [model, snapshot]
+      path_globs: ["models/*.sql", "models/**/*.sql", "snapshots/*.sql", "snapshots/**/*.sql"]
+    description: >
+      In a many-to-one join, the "one" side must be unique on the join key. If it isn't,
+      every duplicate multiplies the rows on the other side: sums and counts inflate,
+      and nothing errors. A key is proven unique by a `unique` test (or a
+      `unique_combination_of_columns` test covering exactly the join columns) on the
+      joined model, or by the query itself: a `group by` on the key, `distinct`, or
+      `qualify row_number() ... = 1` in the CTE being joined.
+    keywords: [join, left join, inner join, fan out, duplicate, unique, join key]
+    example_violation: >
+      A new `left join {{ ref('stg_payments') }} using (order_id)` into an orders model.
+      stg_payments has one row per payment, not per order, and `unique` is tested on
+      payment_id, not order_id, so orders with split payments are duplicated.
+    guidance: >
+      Evidence required before flagging: call get_columns on the joined model and
+      confirm the join key has no `unique` test, and read the joined CTE with
+      get_model_sql to confirm it doesn't dedupe the key. If the join is intentionally
+      one-to-many, the fix is to aggregate the many side to the join grain first. Add a
+      `unique` test on the key either way, so the assumption is enforced.
+
+  - rule_id: null-handling
+    title: Nulls handled in a way that changes the result
+    severity: medium
+    applies_as: checklist
+    applies_to:
+      node_kinds: [model, snapshot]
+      path_globs: ["models/*.sql", "models/**/*.sql", "snapshots/*.sql", "snapshots/**/*.sql"]
+    description: >
+      Null semantics silently change results. A null join key never matches, so an inner
+      join drops those rows. Wrapping join keys in `coalesce(key, 'x')` makes every null
+      match every other null, which is a fan-out. `not in (subquery)` returns no rows at
+      all if the subquery yields one null. `coalesce(amount, 0)` inside `avg()` changes
+      the average, and `count(col)` skips nulls that `count(*)` counts. `isnull(a, b)`
+      is SQL Server's two-argument function; on Snowflake `isnull` isn't that function,
+      and `coalesce` / `ifnull` / `nvl` are the portable forms.
+    keywords: [null, coalesce, isnull, ifnull, nvl, not in, count, avg, nullif]
+    example_violation: >
+      `where customer_id not in (select customer_id from {{ ref('churned') }})`, where
+      churned.customer_id has no not_null test. One null in churned and the model
+      returns zero rows.
+    guidance: >
+      Evidence required: the column is nullable, meaning it has no `not_null` test per
+      get_columns and isn't filtered or coalesced upstream in the query. Prefer
+      `not exists` over `not in`; filter null keys explicitly before a join; use
+      `coalesce` only where the default is the intended business meaning, and say so in
+      a comment.
+
+  - rule_id: collation-consistency
+    title: String comparison or join with inconsistent collation or case handling
+    severity: medium
+    applies_as: checklist
+    applies_to:
+      node_kinds: [model, snapshot]
+      path_globs: ["models/*.sql", "models/**/*.sql", "snapshots/*.sql", "snapshots/**/*.sql"]
+    description: >
+      A comparison between strings is only as correct as its collation. `collate 'en-ci'`
+      (or `lower()` / `upper()`) on one side of a join or filter but not the other gives
+      matching that depends on which side a value came from. Case-insensitive matching on
+      a key that is case-sensitive upstream merges distinct entities. On Snowflake,
+      comparing two expressions with different explicit collations is an error, and a
+      collated column can't be used by some functions and loses clustering pruning.
+    keywords: [collate, collation, lower, upper, ilike, case insensitive, trim]
+    example_violation: >
+      `on lower(a.email) = b.email`: b.email is mixed-case, so every customer whose
+      stored email has a capital letter silently fails to match.
+    guidance: >
+      Apply the same normalisation to both sides: the same `collate` specification, or
+      the same `lower(trim(...))`. Better, normalise once in the staging model and join
+      on the normalised column. Flag only when both sides of the comparison are visible
+      and differ.
+
+  - rule_id: data-type-correctness
+    title: Column type wrong for its meaning, or cast that loses data
+    severity: medium
+    applies_as: checklist
+    applies_to:
+      node_kinds: [model, snapshot]
+      path_globs: ["models/*.sql", "models/**/*.sql", "models/*.yml", "models/**/*.yml", "snapshots/*.sql", "snapshots/**/*.sql"]
+    description: >
+      Types encode meaning. Money in `float` / `double` accumulates rounding error in
+      sums; use a fixed-precision `number(p, s)` / `decimal`. Dates stored as strings sort
+      and compare lexically. A cast to `int` truncates a decimal, and a cast to a shorter
+      `varchar(n)` truncates or errors. A join comparing an integer key to a string key
+      forces an implicit cast that is slow and can fail on one bad value. On a contracted
+      model, a SQL expression whose type disagrees with the declared `data_type` fails
+      the build.
+    keywords: [cast, data_type, type, float, double, decimal, numeric, varchar, date, timestamp, "::"]
+    example_violation: >
+      `total_amount` declared `double` in a finance mart consumed by month-end
+      reporting, so the monthly total drifts by fractions of a cent from the ledger.
+    guidance: >
+      Evidence required: the declared type from get_columns (`types`), or an explicit
+      cast in the SQL. Don't infer a type the manifest doesn't declare. Fix: cast money to
+      `number(38, 2)` (or the currency's precision), dates with `to_date` / `::date` in
+      staging, and make join keys the same type on both sides.
+
+  - rule_id: sql-correctness
+    title: Query shape that silently returns the wrong rows
+    severity: medium
+    applies_as: checklist
+    applies_to:
+      node_kinds: [model, snapshot]
+      path_globs: ["models/*.sql", "models/**/*.sql", "snapshots/*.sql", "snapshots/**/*.sql"]
+    description: >
+      Valid SQL that answers a different question. A `where` on a column of a
+      left-joined table turns the left join into an inner join. `union` removes
+      duplicates that `union all` keeps. Division without `nullif(denominator, 0)` fails
+      or returns null. `between` on a timestamp with a date upper bound excludes almost
+      all of the last day. A window function with no `partition by` ranks across the
+      whole table. `distinct` added to hide duplicates masks a fan-out instead of fixing
+      it. A non-aggregated select column missing from `group by` is an error on most
+      warehouses, and a guess on the rest.
+    keywords: [where, left join, union, between, partition by, distinct, group by, division]
+    example_violation: >
+      `left join payments p on ... where p.status = 'success'`: orders with no payment
+      were meant to be kept, but the filter removes them.
+    guidance: >
+      Evidence required: the full query from get_model_sql, not just the changed lines.
+      Many of these are only wrong in context, so judge them in context. Fix: move
+      conditions on the outer-joined table into the `on` clause, use `union all` unless
+      deduplication is intended, and guard division with `nullif`.
+
+  - rule_id: sql-security
+    title: SQL that widens access or runs untrusted input
+    severity: high
+    applies_as: checklist
+    applies_to:
+      node_kinds: [model, snapshot]
+      path_globs: ["models/*.sql", "models/**/*.sql", "models/*.yml", "models/**/*.yml", "snapshots/*.sql", "snapshots/**/*.sql"]
+    description: >
+      Security defects that live in SQL and config rather than in a credential. A
+      `grant ... to role public` (or `to share`) in a post-hook exposes the model to
+      everyone. Unsetting a masking or row-access policy exposes what it protected. SQL
+      assembled from `var()` or `env_var()` without quoting executes whatever the caller
+      passes, which is injection through the dbt CLI. `copy into` / `unload` to an
+      external stage writes data outside the warehouse's access controls. Credentials
+      themselves are out of scope here, since the deterministic scanner covers them.
+    keywords: [grant, public, post_hook, masking policy, row access, var, env_var, copy into, stage, unload]
+    example_violation: >
+      `post_hook="grant select on {{ this }} to role public"` added to a customers mart
+      containing email and phone columns.
+    guidance: >
+      Grant to specific roles, managed in one place (a `grants:` config), never to
+      public. Quote or validate any `var()` used as an identifier or literal. Keep masking
+      and row-access policies attached, and review any change to them with the data
+      owner.

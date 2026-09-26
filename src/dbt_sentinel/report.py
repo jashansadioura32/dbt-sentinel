@@ -234,11 +234,13 @@ def render_agent_findings(result) -> str:
         lines += ["No policy or correctness findings. Structural analysis above stands.", ""]
         return "\n".join(lines)
 
+    uncited = set(getattr(result, "uncited_rule_ids", ()))
     for finding in result.findings:
         icon = icons.get(finding.severity, "⚪")
+        flag = " · ⚠️ rule not in the policy pack" if finding.rule_id in uncited else ""
         lines.append(
             f"### {icon} `{finding.model}` — {finding.severity.upper()} "
-            f"· `{finding.rule_id}`"
+            f"· `{finding.rule_id}`{flag}"
         )
         lines.append(f"- {_flatten(finding.explanation)}")
         lines.append(f"- **Fix:** {_flatten(finding.suggested_fix)}")

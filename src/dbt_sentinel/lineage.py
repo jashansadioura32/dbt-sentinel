@@ -30,10 +30,12 @@ class Lineage:
         nodes: dict[str, Node],
         child_map: dict[str, list[str]],
         generated_at: datetime | None = None,
+        column_tests: dict[str, dict[str, tuple[str, ...]]] | None = None,
     ):
         self._nodes = nodes
         self._child_map = child_map
         self.generated_at = generated_at
+        self._column_tests = column_tests or {}
 
     # ---------- construction ----------
 
@@ -53,7 +55,7 @@ class Lineage:
         cls._check_version(manifest)
         nodes = cls._parse_nodes(manifest)
         child_map = cls._child_map(manifest, nodes)
-        return cls(nodes, child_map, _parse_generated_at(manifest))
+        return cls(nodes, child_map, _parse_generated_at(manifest), cls._parse_tests(manifest))
 
     def staleness_warning(self, compared_to: datetime | None = None) -> str | None:
         """Warn when the manifest predates the code being reviewed.
@@ -117,6 +119,8 @@ class Lineage:
                 access=raw.get("access"),
                 depends_on=tuple((raw.get("depends_on") or {}).get("nodes", [])),
                 columns=tuple((raw.get("columns") or {}).keys()),
+                raw_code=raw.get("raw_code") or raw.get("raw_sql"),
+                column_types=_declared_types(raw),
             )
 
         for unique_id, raw in (manifest.get("sources") or {}).items():
@@ -126,6 +130,7 @@ class Lineage:
                 kind=NodeKind.SOURCE,
                 path=raw.get("original_file_path"),
                 columns=tuple((raw.get("columns") or {}).keys()),
+                column_types=_declared_types(raw),
             )
 
         for unique_id, raw in (manifest.get("exposures") or {}).items():
@@ -140,6 +145,49 @@ class Lineage:
             )
 
         return nodes
+
+    @staticmethod
+    def _parse_tests(manifest: dict) -> dict[str, dict[str, tuple[str, ...]]]:
+        """Which tests cover which column, keyed by the node they're attached to.
+
+        Test nodes are excluded from the graph (see `_EXCLUDED_KINDS`), but what they
+        assert is exactly the evidence the agent needs to judge a join: a key with a
+        `unique` test can't fan a join out, and one without it might. Answering that from
+        the manifest keeps it a lookup rather than a guess (design rule 1).
+
+        Model-level tests (`unique_combination_of_columns`) are filed under the empty
+        column name, with their columns, since a composite key is unique only as a set.
+        """
+        tests: dict[str, dict[str, list[str]]] = {}
+        for unique_id, raw in (manifest.get("nodes") or {}).items():
+            if _kind_from_id(unique_id) is not NodeKind.TEST:
+                continue
+            metadata = raw.get("test_metadata") or {}
+            name = metadata.get("name")
+            if not name:
+                continue  # a singular test: arbitrary SQL, asserts nothing nameable
+            if metadata.get("namespace"):
+                name = f"{metadata['namespace']}.{name}"
+            attached = raw.get("attached_node")
+            if not attached:
+                # Pre-1.5 manifests have no attached_node. Only a test on exactly one
+                # node is attributable; a relationships test depends on two.
+                depends = (raw.get("depends_on") or {}).get("nodes") or []
+                if len(depends) != 1:
+                    continue
+                attached = depends[0]
+            column = raw.get("column_name") or ""
+            if not column and (combo := (metadata.get("kwargs") or {}).get("combination_of_columns")):
+                name = f"{name}({', '.join(combo)})"
+            tests.setdefault(attached, {}).setdefault(column, []).append(name)
+        return {
+            node: {column: tuple(sorted(names)) for column, names in by_column.items()}
+            for node, by_column in tests.items()
+        }
+
+    def tests_for(self, unique_id: str) -> dict[str, tuple[str, ...]]:
+        """Test names per column for one node. `""` holds model-level tests."""
+        return self._column_tests.get(unique_id, {})
 
     @staticmethod
     def _child_map(manifest: dict, nodes: dict[str, Node]) -> dict[str, list[str]]:
@@ -240,6 +288,16 @@ def _strip_package(patch_path: str | None) -> str | None:
     if not patch_path:
         return None
     return patch_path.split("://", 1)[-1]
+
+
+def _declared_types(raw: dict) -> tuple[tuple[str, str], ...]:
+    """(column, data_type) for columns that declare one. Undeclared is not "unknown
+    type": it's no claim at all, and the agent must not read it as one."""
+    return tuple(
+        (name, str(column["data_type"]))
+        for name, column in (raw.get("columns") or {}).items()
+        if (column or {}).get("data_type")
+    )
 
 
 def _parse_generated_at(manifest: dict) -> datetime | None:

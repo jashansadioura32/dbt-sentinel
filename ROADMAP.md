@@ -34,6 +34,25 @@ rather than merely deferred.
   hunk's `@@` offsets plus a read of the base-branch file — the same offset parsing the
   inline-comments entry below is waiting on.
 
+## Found building the SQL checklist, deferred on purpose
+
+- **`models/**/*.sql` never matches a top-level model.** fnmatch's `**/` needs at least
+  one directory, so `models/orders.sql` and `models/exposures.yml` fall outside five
+  retrieved rules' globs: `grain-integrity`, `incremental-safety`, `test-coverage-keys`,
+  `exposure-ownership` and `source-freshness`. `s04_exposure_owner_change` can never
+  match `exposure-ownership` as a result. Measured with the fix applied (treating
+  `dir/**/x` as also matching `dir/x`): retrieval precision@3 0.636 -> **0.647**,
+  recall@3 0.778 -> **0.815**, correct silence unchanged at 0.455. Deferred only
+  because it moves published metrics, which needs RESULTS/BASELINE and the CI floors
+  updated in the same commit. The checklist rules work around it by listing
+  `models/*.sql` explicitly.
+- **SQL checklist iteration.** The three failure modes in `evals/SQL_POLICY_RESULTS.md`:
+  overlapping governance and checklist rules, silence without `get_model_sql`, and
+  findings filed for non-issues. Fix in its own session and re-measure over at least
+  three runs, since two unchanged runs differed by 0.5 in precision.
+- **Log tool calls in the eval harnesses.** Neither harness records which tools the
+  agent called, which is the first thing failure mode 2 needs to know.
+
 ## Found by the day-3 eval baseline — FIXED on day 7
 
 Both were measured in `evals/BASELINE.md` and fixed in the day-7 iteration round. The

@@ -36,7 +36,9 @@ from .report import (
 from .security import scan_secrets
 
 
-def _run_agent(assessments: list, lineage: Lineage, policy_dir: str | None) -> str:
+def _run_agent(
+    assessments: list, lineage: Lineage, policy_dir: str | None, from_worktree: bool
+) -> str:
     """Run the reviewer agent and render its findings.
 
     The lineage is passed in rather than reached for globally: the agent's tools answer
@@ -64,7 +66,11 @@ def _run_agent(assessments: list, lineage: Lineage, policy_dir: str | None) -> s
 
     # ReviewerAgent.review never raises; every failure path returns a degraded result
     # that the renderer states plainly.
-    result = ReviewerAgent(lineage, pack).review(assessments)
+    # With --since the working tree is the commit under review, so the agent can read the
+    # new SQL. A --diff file carries no full files, and the agent is told it sees the
+    # base version instead.
+    head_source = _read_worktree_file if from_worktree else None
+    result = ReviewerAgent(lineage, pack, head_source=head_source).review(assessments)
     rendered = render_agent_findings(result) + pack_note
 
     # Same cost and latency the PR comment footer carries. A local run that cannot tell
@@ -111,6 +117,13 @@ def _explain_retrieval(changes: list, policy_dir: str | None) -> str:
 
     pack.save_cache()
     return "\n".join(lines)
+
+
+def _read_worktree_file(path: str) -> str | None:
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return None
 
 
 class GitError(Exception):
@@ -333,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.agent:
         print()
-        print(_run_agent(assessments, lineage, args.policies))
+        print(_run_agent(assessments, lineage, args.policies, from_worktree=bool(args.since)))
 
     if args.explain:
         print(_explain_retrieval(changes, args.policies))

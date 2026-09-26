@@ -84,6 +84,19 @@ Exit code is 1, so it works as a CI gate. On your own project, run `dbt parse`, 
 `dbt-sentinel --since origin/main` from the project directory to review the current branch
 the way its PR will be reviewed.
 
+### Security and SQL review
+
+- **Exposed secrets fail the PR.** Provider tokens, private keys, passwords in
+  connection URLs and literal credentials in any added line of any file: profiles.yml,
+  macros and `.env` included. It's the only finding outside the blast radius that sets
+  a failing status, because a credential is compromised on push, not on merge. Values
+  are always redacted in the comment.
+- **`= null` comparisons** are flagged as a deterministic check.
+- **A SQL review checklist** for the agent covers join-key uniqueness (checked against
+  the manifest's `unique` tests), null handling, collation, data types, query
+  correctness and SQL security (`policies/sql_quality.yml`). It's advisory, and
+  **measured as not working yet**: see [evals/SQL_POLICY_RESULTS.md](evals/SQL_POLICY_RESULTS.md).
+
 ### In VS Code, on every commit
 
 A post-commit hook reviews the branch in the background, with the agent included, and

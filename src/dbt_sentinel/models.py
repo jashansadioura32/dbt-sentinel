@@ -38,6 +38,10 @@ class Node:
     depends_on: tuple[str, ...] = ()
     columns: tuple[str, ...] = ()
     owner: str | None = None  # exposures carry this; useful for review routing
+    # For the agent's SQL-judgment policies (join keys, null handling, types). The diff
+    # shows only changed lines, and a join can't be judged without the rest of the query.
+    raw_code: str | None = None
+    column_types: tuple[tuple[str, str], ...] = ()  # (column, declared data_type)
 
     @property
     def is_consumer_facing(self) -> bool:

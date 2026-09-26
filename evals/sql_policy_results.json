@@ -1,0 +1,238 @@
+{
+  "summary": {
+    "fixtures": 12,
+    "precision": 0.0,
+    "recall": 0.0,
+    "false_positive_rate_on_near_misses": 0.167,
+    "exact_match": 5,
+    "degraded": 0,
+    "invented_rule_ids": [],
+    "total_input_tokens": 50998,
+    "total_output_tokens": 2192,
+    "cost_usd": 0.1494
+  },
+  "fixtures": [
+    {
+      "id": "q01_join_fans_out",
+      "expected": [
+        "join-key-uniqueness"
+      ],
+      "cited": [],
+      "pass": false,
+      "degraded": false,
+      "degradation_reason": null,
+      "input_tokens": 6675,
+      "output_tokens": 191,
+      "uncited_rule_ids": [],
+      "findings": [
+        {
+          "rule_id": "pii-tagging",
+          "severity": "medium",
+          "explanation": "The column 'last_payment_method' has been added without any PII tagging. If this column contains any personally identifiable information, it must be tagged appropriately."
+        }
+      ]
+    },
+    {
+      "id": "q01n_join_on_unique_key",
+      "expected": [],
+      "cited": [
+        "join-key-uniqueness"
+      ],
+      "pass": false,
+      "degraded": false,
+      "degradation_reason": null,
+      "input_tokens": 3317,
+      "output_tokens": 258,
+      "uncited_rule_ids": [],
+      "findings": [
+        {
+          "rule_id": "pii-tagging",
+          "severity": "medium",
+          "explanation": "The newly added column 'customer_first_name' potentially contains personally identifiable information (PII) as it deals with customer names. It is added without proper tagging, risking invisibility to downstream controls."
+        },
+        {
+          "rule_id": "join-key-uniqueness",
+          "severity": "medium",
+          "explanation": "The join on 'customer_id' from the orders model to 'stg_customers' is correctly implemented as 'customer_id' in 'stg_customers' has both 'not_null' and 'unique' tests."
+        }
+      ]
+    },
+    {
+      "id": "q02_not_in_nullable",
+      "expected": [
+        "null-handling"
+      ],
+      "cited": [],
+      "pass": false,
+      "degraded": false,
+      "degradation_reason": null,
+      "input_tokens": 3151,
+      "output_tokens": 311,
+      "uncited_rule_ids": [],
+      "findings": []
+    },
+    {
+      "id": "q02n_not_exists",
+      "expected": [],
+      "cited": [],
+      "pass": true,
+      "degraded": false,
+      "degradation_reason": null,
+      "input_tokens": 3018,
+      "output_tokens": 153,
+      "uncited_rule_ids": [],
+      "findings": [
+        {
+          "rule_id": "join-key-uniqueness",
+          "severity": "low",
+          "explanation": "The join between 'customers' and 'stg_orders' on 'customer_id' in the where-exists clause may duplicate rows since 'customer_id' is not a unique key in the 'stg_orders'."
+        }
+      ]
+    },
+    {
+      "id": "q03_one_sided_case_folding",
+      "expected": [
+        "collation-consistency"
+      ],
+      "cited": [],
+      "pass": false,
+      "degraded": false,
+      "degradation_reason": null,
+      "input_tokens": 3143,
+      "output_tokens": 149,
+      "uncited_rule_ids": [],
+      "findings": [
+        {
+          "rule_id": "pii-tagging",
+          "severity": "medium",
+          "explanation": "The column 'has_possible_duplicate' was added, which identifies potential duplicate customers. This involves comparing names which likely contain personally identifiable information (PII). The column should be reviewed for PII compliance and tagged appropriately."
+        }
+      ]
+    },
+    {
+      "id": "q03n_both_sides_folded",
+      "expected": [],
+      "cited": [],
+      "pass": true,
+      "degraded": false,
+      "degradation_reason": null,
+      "input_tokens": 3364,
+      "output_tokens": 166,
+      "uncited_rule_ids": [],
+      "findings": [
+        {
+          "rule_id": "pii-tagging",
+          "severity": "medium",
+          "explanation": "The PR introduces a new column 'has_possible_duplicate' without ensuring it's tagged for PII as it checks for possible duplicate based on first and last names, which could be considered personally identifiable information."
+        }
+      ]
+    },
+    {
+      "id": "q04_money_as_float",
+      "expected": [
+        "data-type-correctness"
+      ],
+      "cited": [],
+      "pass": false,
+      "degraded": false,
+      "degradation_reason": null,
+      "input_tokens": 4560,
+      "output_tokens": 221,
+      "uncited_rule_ids": [],
+      "findings": [
+        {
+          "rule_id": "type-safety",
+          "severity": "high",
+          "explanation": "The cast of 'amount' from its original datatype to 'float' introduces a type change, which could affect any downstream consumers relying on specific type behavior. High severity due to the type-safety policy rule associated with type narrowing and the model's reach with downstream nodes and exposures."
+        }
+      ]
+    },
+    {
+      "id": "q04n_money_as_decimal",
+      "expected": [],
+      "cited": [],
+      "pass": true,
+      "degraded": false,
+      "degradation_reason": null,
+      "input_tokens": 3041,
+      "output_tokens": 208,
+      "uncited_rule_ids": [],
+      "findings": [
+        {
+          "rule_id": "type-safety",
+          "severity": "high",
+          "explanation": "The query modifies the type casting of 'amount' from 'amount / 100' to 'cast(amount / 100 as number(38, 2))', narrowing it potentially. Since 'stg_payments' is upstream of the contracted model 'fct_order_payments', this could violate type-safety policies."
+        }
+      ]
+    },
+    {
+      "id": "q05_where_nullifies_left_join",
+      "expected": [
+        "sql-correctness"
+      ],
+      "cited": [],
+      "pass": false,
+      "degraded": false,
+      "degradation_reason": null,
+      "input_tokens": 6012,
+      "output_tokens": 63,
+      "uncited_rule_ids": [],
+      "findings": []
+    },
+    {
+      "id": "q05n_where_on_preserved_side",
+      "expected": [],
+      "cited": [],
+      "pass": true,
+      "degraded": false,
+      "degradation_reason": null,
+      "input_tokens": 4241,
+      "output_tokens": 46,
+      "uncited_rule_ids": [],
+      "findings": []
+    },
+    {
+      "id": "q06_grant_to_public",
+      "expected": [
+        "sql-security"
+      ],
+      "cited": [],
+      "pass": false,
+      "degraded": false,
+      "degradation_reason": null,
+      "input_tokens": 5624,
+      "output_tokens": 261,
+      "uncited_rule_ids": [],
+      "findings": [
+        {
+          "rule_id": "public-access-review",
+          "severity": "medium",
+          "explanation": "Access has been widened to public, which allows other dbt projects to reference the model. This can turn its columns into a published interface susceptible to breaking changes in the future."
+        },
+        {
+          "rule_id": "materialization-review",
+          "severity": "medium",
+          "explanation": "The materialization type has been changed. Materialization impacts cost, freshness, and behavior; changing it can have operational impacts on downstream nodes."
+        }
+      ]
+    },
+    {
+      "id": "q06n_grant_to_named_role",
+      "expected": [],
+      "cited": [],
+      "pass": true,
+      "degraded": false,
+      "degradation_reason": null,
+      "input_tokens": 4852,
+      "output_tokens": 165,
+      "uncited_rule_ids": [],
+      "findings": [
+        {
+          "rule_id": "materialization-review",
+          "severity": "medium",
+          "explanation": "The change in materialization from a view to a table affects how downstream data consumers will interact with the model. This change can impact query performance and data freshness."
+        }
+      ]
+    }
+  ]
+}

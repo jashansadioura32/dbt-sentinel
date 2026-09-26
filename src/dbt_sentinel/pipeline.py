@@ -240,7 +240,11 @@ def review_pull_request(
         except (FileNotFoundError, ValueError):
             pass
 
-        result = ReviewerAgent(lineage, pack).review(assessments)
+        # The PR's version of each file, so the agent judges the new SQL rather than
+        # the base branch's copy in the manifest.
+        result = ReviewerAgent(
+            lineage, pack, head_source=lambda path: client.fetch_file(pr, path, ref=pr.head_sha)
+        ).review(assessments)
         agent_ran = result.ran
         cost = _agent_cost(result)
         body = body + "\n" + render_agent_findings(result)
