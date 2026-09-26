@@ -80,7 +80,7 @@ GitHub webhook
 ## Current state
 
 Days 1-10 complete, plus a check layer (3 phases) and the day-7 iteration round.
-216 tests pass.
+217 tests pass.
 
 - `models.py` — domain types (Node, ChangedFile, ChangedNode, BlastRadius)
 - `lineage.py` — manifest parsing, node graph, BFS blast radius
