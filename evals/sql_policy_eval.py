@@ -40,7 +40,7 @@ EVALS = Path(__file__).resolve().parent
 FIXTURES = EVALS / "fixtures" / "sql"
 MANIFEST = EVALS / "manifest" / "manifest.json"
 RESULTS = EVALS / "sql_policy_results.json"
-FLAGGED = ("medium", "high")
+SEVERITY = {"low": 0, "medium": 1, "high": 2}
 
 
 def load_labels() -> list[dict]:
@@ -83,9 +83,14 @@ def run_fixture(label: dict, lineage: Lineage, pack: PolicyPack) -> dict:
         lineage, pack, head_source=lambda path: head if path == changed_path else None
     ).review(build_assessments(changes, lineage))
 
-    checklist = {r.rule_id for r in pack.checklist_rules}
+    # A citation counts from its rule's own severity up. A LOW rule (column-name-spelling)
+    # scored against a MEDIUM floor would count every correct finding as a miss; the
+    # medium and high rules are unaffected, so their published numbers don't move.
+    floor = {r.rule_id: min(SEVERITY[r.severity], SEVERITY["medium"]) for r in pack.checklist_rules}
     cited = sorted({
-        f.rule_id for f in result.findings if f.rule_id in checklist and f.severity in FLAGGED
+        f.rule_id
+        for f in result.findings
+        if f.rule_id in floor and SEVERITY[f.severity] >= floor[f.rule_id]
     })
     expected = sorted(label["expected_rule_ids"])
     return {

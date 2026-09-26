@@ -31,6 +31,7 @@ CHECKLIST = {
     "collation-consistency",
     "data-type-correctness",
     "sql-correctness",
+    "column-name-spelling",
     "sql-security",
 }
 
@@ -87,12 +88,16 @@ def test_adding_checklist_rules_does_not_move_retrieval_scores(tmp_path, lineage
 
 
 def test_checklist_is_scoped_by_the_prefilter(pack, lineage):
-    """A schema.yml edit gets the two rules that read YAML (types, grants), not the
-    four that judge a query."""
+    """A schema.yml edit gets the three rules that read YAML (types, column names,
+    grants), not the four that judge a query."""
     yml_changes = [c for c in _changes(lineage, "b03_contract_column_dropped") if c.file.path.endswith(".yml")]
     assert yml_changes
     for changed in yml_changes:
-        assert {r.rule_id for r in pack.checklist(changed)} == {"data-type-correctness", "sql-security"}
+        assert {r.rule_id for r in pack.checklist(changed)} == {
+            "data-type-correctness",
+            "column-name-spelling",
+            "sql-security",
+        }
 
 
 def test_an_unknown_applies_as_is_a_load_error(tmp_path):
@@ -256,7 +261,7 @@ def test_harness_dry_run_validates_every_fixture(capsys):
     from evals import sql_policy_eval
 
     assert sql_policy_eval.main(["--dry-run"]) == 0
-    assert "12 SQL checklist fixtures valid" in capsys.readouterr().out
+    assert "14 SQL checklist fixtures valid" in capsys.readouterr().out
 
 
 def test_harness_without_a_key_exits_two_and_writes_nothing(monkeypatch, tmp_path):
@@ -283,3 +288,25 @@ def test_harness_with_zero_token_spend_exits_two_and_writes_nothing(monkeypatch,
     )
     assert sql_policy_eval.main([]) == 2
     assert not (tmp_path / "out.json").exists()
+
+
+def test_a_low_severity_rule_counts_at_low_and_the_rest_still_need_medium(monkeypatch, lineage, pack):
+    """column-name-spelling is LOW by design. Scored against the MEDIUM floor the other
+    rules use, every correct spelling finding would count as a miss."""
+    from dbt_sentinel.agent import AgentResult, Finding
+    from evals import sql_policy_eval
+
+    def fake_review(self, assessments):
+        return AgentResult(findings=[
+            Finding(rule_id="column-name-spelling", severity="low", model="customers",
+                    explanation="avrage is misspelled.", suggested_fix="Rename to average_order_value."),
+            Finding(rule_id="join-key-uniqueness", severity="low", model="customers",
+                    explanation="Maybe a fan-out.", suggested_fix="Check it."),
+        ], input_tokens=1)
+
+    monkeypatch.setattr(sql_policy_eval.ReviewerAgent, "review", fake_review)
+    [label] = [l for l in sql_policy_eval.load_labels() if l["id"] == "q07_misspelled_new_column"]
+    row = sql_policy_eval.run_fixture(label, lineage, pack)
+    # The spelling rule counts at low; a low join-key-uniqueness citation still doesn't.
+    assert row["cited"] == ["column-name-spelling"]
+    assert row["pass"]

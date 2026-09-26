@@ -80,7 +80,7 @@ GitHub webhook
 ## Current state
 
 Days 1-10 complete, plus a check layer (3 phases), the day-7 iteration round, local
-VS Code mode, secret scanning and the SQL review checklist. 287 tests pass.
+VS Code mode, secret scanning and the SQL review checklist. 288 tests pass.
 
 - `models.py` — domain types (Node, ChangedFile, ChangedNode, BlastRadius)
 - `lineage.py` — manifest parsing, node graph, BFS blast radius
@@ -93,12 +93,12 @@ VS Code mode, secret scanning and the SQL review checklist. 287 tests pass.
   the blast radius
 - `security.py` — exposed-secret scan over every file; the one non-blast-radius
   finding that fails the status
-- `policies/sql_quality.yml` — six `applies_as: checklist` rules the agent applies to
+- `policies/sql_quality.yml` — seven `applies_as: checklist` rules the agent applies to
   every SQL change; kept out of the retrieval index so retrieval metrics can't move
 - `github.py` / `webhook.py` / `pipeline.py` — the GitHub App
 - `cli.py` — entrypoint with `--fail-on` exit codes; `--since REF` diffs via git
 - `integrations/vscode/` — post-commit hook + task for local review (`docs/LOCAL.md`)
-- `evals/` — 30 severity fixtures, 12 check fixtures, 12 SQL checklist fixtures,
+- `evals/` — 30 severity fixtures, 12 check fixtures, 14 SQL checklist fixtures,
   five harnesses
 - `docs/` — PRD, architecture + ADRs, eval report, checks spec, deployment
 

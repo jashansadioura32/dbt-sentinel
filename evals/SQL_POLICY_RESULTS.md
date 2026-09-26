@@ -9,8 +9,12 @@ used an injected fake client, because the OpenAI account had no credits.
 - **Model:** `gpt-4o`, the pinned `DEFAULT_MODEL`.
 - **Date:** 2026-09-26.
 - **Cost:** about $0.15 per full run.
-- **Scoring:** counts only checklist `rule_id`s cited at medium or above. Labels were
+- **Scoring:** counts only checklist `rule_id`s, cited at medium or above (at low or above for the one low-severity rule, `column-name-spelling`). Labels were
   written before the agent ran.
+
+> **Added after this measurement:** `column-name-spelling`, the seventh rule, and its
+> fixture pair `q07` / `q07n`. They are validated in CI (`--dry-run`) but **unmeasured**:
+> the runs below cover the first 12 fixtures only.
 
 ## Result: the checklist doesn't work yet
 

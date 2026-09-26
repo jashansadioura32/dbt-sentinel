@@ -94,7 +94,7 @@ the way its PR will be reviewed.
 - **`= null` comparisons** are flagged as a deterministic check.
 - **A SQL review checklist** for the agent covers join-key uniqueness (checked against
   the manifest's `unique` tests), null handling, collation, data types, query
-  correctness and SQL security (`policies/sql_quality.yml`). It's advisory, and
+  correctness, column-name spelling and SQL security (`policies/sql_quality.yml`). It's advisory, and
   **measured as not working yet**: see [evals/SQL_POLICY_RESULTS.md](evals/SQL_POLICY_RESULTS.md).
 
 ### In VS Code, on every commit
