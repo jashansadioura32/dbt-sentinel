@@ -1,0 +1,19 @@
+diff --git a/models/orders.sql b/models/orders.sql
+index 1111111..2222222 100644
+--- a/models/orders.sql
++++ b/models/orders.sql
+@@ -49,8 +49,14 @@ final as (
+ 
+ 
+     left join order_payments
+         on orders.order_id = order_payments.order_id
+ 
++    -- `cancelled_at = null` is never true, so this uses is null
++    where (orders.status != 'returned' or orders.cancelled_at is null)
++      and nullif(orders.status, '') is not null
++      and coalesce(order_payments.total_amount, 0) >= 0
++      {% if var('exclude_test_orders', none) != none %} and orders.is_test = false {% endif %}
++
+ )
+ 
+ select * from final

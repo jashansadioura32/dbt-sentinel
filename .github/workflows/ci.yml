@@ -52,6 +52,12 @@ jobs:
       - name: Check-layer eval
         run: python -m evals.checks_eval
 
+      # Validation only: no key here, so the agent never runs. It keeps the SQL
+      # checklist fixtures resolvable and their labels citing real rules, so a live run
+      # (by hand, like evals/compare.py) never scores a broken fixture as a model error.
+      - name: SQL checklist fixtures are valid
+        run: python -m evals.sql_policy_eval --dry-run
+
       - name: Assert published baselines have not regressed
         run: python .github/scripts/check_baselines.py
 

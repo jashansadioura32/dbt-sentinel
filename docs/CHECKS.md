@@ -26,6 +26,7 @@ So checks are a **peer** of the blast radius, not a component of it:
 | Section | Source | Reach-amplified? | Gates the merge? |
 |---|---|---|---|
 | `## Blast radius` | `report.assess` | yes | **yes** — HIGH sets a failing status |
+| `## Security` | `security.py` | no | **yes** — any exposed secret sets a failing status |
 | `## Checks` | `checks.py` | no | no |
 | `## Reviewer findings` | `agent.py` | no | no |
 
@@ -64,6 +65,35 @@ that a *new* one is. That is the right trade for a PR reviewer.
 | `deprecated-tests-key` | testing | low | An added line in `models/**/*.yml` matches `^\s*tests:` | The line is `data_tests:`; the file is `dbt_project.yml`; the key appears only on a context line |
 | `hardcoded-relation` | portability | medium | An added SQL line has `from`/`join` followed by a dotted identifier outside `{{ }}` | The line is a comment; the identifier is inside a Jinja expression; the reference is a bare CTE name |
 | `cross-layer-reference` | structure | medium | A changed node's path layer is downstream of a layer it `depends_on` — e.g. a staging model refs a mart | Both nodes are in the same layer; the reference points upstream; either path matches no known layer prefix |
+| `null-comparison` | correctness | medium | An added SQL line in `models/**` compares with `= null`, `!= null` or `<> null` outside a comment or Jinja | The comparison is `is null` / `is not null`; it is an assignment (`set col = null`); it is inside `{{ }}` / `{% %}`; the line is a comment |
+
+`null-comparison` is the one SQL-semantics check that needs no judgment: `x = null` is
+never true in SQL, for any `x`, including null. The filter silently returns no rows and
+the model still builds. Everything about null *handling* that does need judgment (a
+`coalesce` default that changes the meaning, `not in` against a nullable column, a
+null-unsafe join key) belongs to the `null-handling` policy the agent applies.
+
+## Security: exposed secrets
+
+A separate section, and the **only** finding outside the blast radius that gates the
+merge. Invariant 1 above still holds, because this isn't a check: it has its own type in
+`security.py` and never enters `CHECKS`.
+
+Why it gates while checks don't: every check finding costs something only if merged. A
+credential costs something the moment it's **pushed**, because it's then in git
+history, forks and CI logs. Reach is irrelevant (design rule 2 holds trivially), and so
+is the merge. The fix is always to rotate the credential; deleting the line doesn't
+un-leak it.
+
+It's deterministic on purpose. Credential formats are exact patterns, and a missed
+secret is the costliest miss the tool can make, so it must not depend on model sampling.
+
+| check_id | Scans | Fires when | Does NOT fire when |
+|---|---|---|---|
+| `exposed-secret` | added lines of **every** file, not only `models/**`: secrets leak in `profiles.yml`, `dbt_project.yml`, macros, `.env` | A known credential format (AWS access key id, GitHub / Slack / Stripe / OpenAI / Anthropic / Google API tokens); a PEM `PRIVATE KEY` header; a URL with an inline `user:password@`; or a credential-named key (`password`, `secret`, `token`, `api_key`, `private_key`, `client_secret`, …) assigned a literal value | The value is Jinja (`{{ env_var('DBT_PASSWORD') }}`) or a `${VAR}` reference; the value is empty or a placeholder (`<password>`, `***`, `xxxx`, `changeme`, `your_…`); the word is a *column name* (`- name: password_hash`); the line was removed, not added |
+
+The rendered finding **redacts** the value (`AKIA…****`). The diff is already public;
+the review mustn't also copy the secret into a comment that gets emailed and indexed.
 
 **The "Does NOT fire when" column is the false-positive contract.** It is written before
 implementation and it is what the near-miss fixtures test. A check whose negative column is
@@ -101,8 +131,8 @@ check layer gets its own eval — the same separation day 4 used for retrieval, 
 same reason: when something is wrong, "the check misfired" and "the severity was wrong"
 need different fixes and one number cannot tell them apart.
 
-- `evals/fixtures/checks/` — 8 diffs, one true positive and one idiomatic near-miss per
-  check. The TP/near-miss pairing is the `b01`/`p10` discipline: two fixtures that look
+- `evals/fixtures/checks/` — 12 diffs, one true positive and one idiomatic near-miss per
+  check, `exposed-secret` included. The TP/near-miss pairing is the `b01`/`p10` discipline: two fixtures that look
   alike and mean the opposite.
 - `evals/checks_eval.py` → `evals/checks_results.json`, publishing precision / recall / FPR.
 - Floors are added to `.github/scripts/check_baselines.py` **in a separate commit from the

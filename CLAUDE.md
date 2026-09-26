@@ -79,20 +79,27 @@ GitHub webhook
 
 ## Current state
 
-Days 1-10 complete, plus a check layer (3 phases) and the day-7 iteration round.
-217 tests pass.
+Days 1-10 complete, plus a check layer (3 phases), the day-7 iteration round, local
+VS Code mode, secret scanning and the SQL review checklist. 287 tests pass.
 
 - `models.py` — domain types (Node, ChangedFile, ChangedNode, BlastRadius)
 - `lineage.py` — manifest parsing, node graph, BFS blast radius
 - `diff.py` — unified diff parsing, file->node resolution, column extraction
 - `report.py` — severity scoring, Markdown + Mermaid rendering
 - `retrieval.py` — hybrid keyword + TF-IDF retrieval over the policy pack
-- `agent.py` — reviewer agent, tool-calling, structured output, degradation paths
-- `checks.py` — four deterministic lint checks, a peer of the blast radius
+- `agent.py` — reviewer agent, tool-calling, structured output, degradation paths;
+  `get_model_sql` / `get_columns` (tests + declared types) feed the SQL checklist
+- `checks.py` — five deterministic lint checks (incl. `null-comparison`), a peer of
+  the blast radius
+- `security.py` — exposed-secret scan over every file; the one non-blast-radius
+  finding that fails the status
+- `policies/sql_quality.yml` — six `applies_as: checklist` rules the agent applies to
+  every SQL change; kept out of the retrieval index so retrieval metrics can't move
 - `github.py` / `webhook.py` / `pipeline.py` — the GitHub App
 - `cli.py` — entrypoint with `--fail-on` exit codes; `--since REF` diffs via git
 - `integrations/vscode/` — post-commit hook + task for local review (`docs/LOCAL.md`)
-- `evals/` — 30 labelled severity fixtures + 8 check fixtures, four harnesses
+- `evals/` — 30 severity fixtures, 12 check fixtures, 12 SQL checklist fixtures,
+  five harnesses
 - `docs/` — PRD, architecture + ADRs, eval report, checks spec, deployment
 
 **Published metrics** (day 7, `evals/RESULTS_V2.md`): precision 0.909, recall 0.588,
@@ -102,11 +109,12 @@ regression, and moving a floor requires updating the published doc in the same c
 
 ### The two things that remain
 
-1. **The agent has never run.** Every agent test injects a fake client. `evals/compare.py`
-   is written and gated, but the OpenAI account has no credits, so `RESULTS_V1.md` does
-   not exist. Its plumbing is proven; its review quality is entirely unknown.
-2. **Never deployed.** The GitHub App is wired and tested against a fake client. No real
-   PR has received a comment.
+1. **The agent has run once, on the SQL checklist, and doesn't work yet.** First live
+   measurement is `evals/SQL_POLICY_RESULTS.md` (2026-09-26): precision 0.000 / recall
+   0.000 on 12 fixtures, with three named failure modes. `evals/compare.py` (the severity
+   comparison, `RESULTS_V1.md`) still has not been run; the account now has credits.
+2. **Deployed, one real PR reviewed.** The App comments on jeffle-shop PR #1 and sets
+   its status. The agent section there still shows the old no-credits degradation.
 
 ### Regression tests that must keep passing
 
@@ -121,6 +129,15 @@ Day 7 (`tests/test_day7.py`, the two deferred failure modes):
 - An added column is not structural; `p10` and `b01` must not converge
 - `evals/compare.py` must exit 2 and write no file when the agent arm never ran, keyed
   off token spend rather than the errored flag
+
+Security and SQL checklist (`tests/test_security.py`, `tests/test_sql_policies.py`):
+- An exposed secret fails the status even when no dbt node changed and no manifest exists,
+  and its comment is never deleted as empty
+- The rendered comment never contains the secret; token-shaped test values are built at
+  runtime so none is committed
+- Checklist rules are never retrieved, and loading them leaves retrieval scores identical
+- A cited rule_id missing from the pack is flagged, not rendered as policy
+- Windows-compiled manifest paths are normalised before fetching the PR's file
 
 ## Known limitations — documented, not hidden
 

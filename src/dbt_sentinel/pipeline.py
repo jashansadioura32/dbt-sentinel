@@ -18,7 +18,14 @@ from .diff import parse_diff, resolve_changes
 from .github import GitHubClient, GitHubError, PullRequestRef
 from .lineage import Lineage, ManifestError
 from .pricing import cost_usd
-from .report import build_assessments, render_agent_findings, render_checks, render_markdown
+from .report import (
+    build_assessments,
+    render_agent_findings,
+    render_checks,
+    render_markdown,
+    render_security,
+)
+from .security import scan_secrets
 
 # Identifies our own comment so re-reviews update in place. Invisible when rendered.
 COMMENT_MARKER = "<!-- dbt-sentinel:review -->"
@@ -39,15 +46,17 @@ class ReviewOutcome:
     changed_nodes: int = 0
     has_unresolved: bool = False
     reviewed: bool = True
+    secrets_found: int = 0
 
     @property
     def status_state(self) -> str:
-        """HIGH blocks the merge; everything else passes.
+        """HIGH blocks the merge, and so does an exposed secret; everything else passes.
 
         MEDIUM deliberately does not block. A gate that fires on judgment calls gets
-        switched off within a week, and then the HIGH signal is gone too.
+        switched off within a week, and then the HIGH signal is gone too. A secret is not
+        a judgment call: it's a pattern match, and it's compromised on push, not on merge.
         """
-        return "failure" if self.severity == "high" else "success"
+        return "failure" if self.severity == "high" or self.secrets_found else "success"
 
     @property
     def has_nothing_to_report(self) -> bool:
@@ -68,10 +77,19 @@ class ReviewOutcome:
         Derived from the counts rather than by matching the rendered text, so wording
         changes in report.py cannot silently turn deletion off.
         """
-        return self.reviewed and self.changed_nodes == 0 and not self.has_unresolved
+        # A secret in profiles.yml changes no dbt node, and deleting the only comment
+        # that says "rotate this key" would be the worst silence available.
+        return (
+            self.reviewed
+            and self.changed_nodes == 0
+            and not self.has_unresolved
+            and not self.secrets_found
+        )
 
     @property
     def status_description(self) -> str:
+        if self.secrets_found:
+            return f"Exposed credential in this PR ({self.secrets_found}). Rotate it"
         if self.severity == "high":
             return f"Breaking change detected across {self.changed_nodes} changed model(s)"
         if self.changed_nodes == 0:
@@ -148,15 +166,26 @@ def review_pull_request(
     lineage, manifest_source, warnings = source_manifest(client, pr, local_manifest)
 
     if lineage is None:
+        # Secret scanning needs no manifest, so a repo without one still gets it. A
+        # leaked key must not go unreported because the lineage half couldn't run.
+        secrets = []
+        try:
+            secrets = scan_secrets(parse_diff(client.fetch_diff(pr)))
+        except GitHubError:
+            pass  # the manifest warning below is already the actionable message
+        body = "Could not review this PR: no dbt manifest was available."
+        if section := render_security(secrets):
+            body = section + "\n" + body
         return ReviewOutcome(
             comment=_render_comment(
-                body="Could not review this PR: no dbt manifest was available.",
+                body=body,
                 warnings=warnings,
                 footer=_footer(manifest_source, 0.0, time.monotonic() - started, False),
             ),
             manifest_source=manifest_source,
             warnings=warnings,
             reviewed=False,
+            secrets_found=len(secrets),
         )
 
     try:
@@ -182,11 +211,18 @@ def review_pull_request(
 
     body = render_markdown(assessments, unresolved)
 
+    # Before anything else in the comment: it's the one finding that needs action
+    # whether or not the PR is ever merged.
+    files = parse_diff(diff_text)
+    secrets = scan_secrets(files)
+    if section := render_security(secrets):
+        body = section + "\n" + body
+
     # Deterministic checks render as a peer of the blast radius, never folded into it:
     # a lint finding has no reach, so it must not be amplified by one (design rule 2).
     # Note what is NOT touched below — `severity` still comes only from assessments, so
     # a check can never change the commit status.
-    check_findings = run_checks(parse_diff(diff_text), changes, lineage)
+    check_findings = run_checks(files, changes, lineage)
     if section := render_checks(check_findings):
         body = body + "\n" + section
 
@@ -204,7 +240,11 @@ def review_pull_request(
         except (FileNotFoundError, ValueError):
             pass
 
-        result = ReviewerAgent(lineage, pack).review(assessments)
+        # The PR's version of each file, so the agent judges the new SQL rather than
+        # the base branch's copy in the manifest.
+        result = ReviewerAgent(
+            lineage, pack, head_source=lambda path: client.fetch_file(pr, path, ref=pr.head_sha)
+        ).review(assessments)
         agent_ran = result.ran
         cost = _agent_cost(result)
         body = body + "\n" + render_agent_findings(result)
@@ -231,6 +271,7 @@ def review_pull_request(
         latency_s=latency,
         changed_nodes=len(changes),
         has_unresolved=bool(unresolved),
+        secrets_found=len(secrets),
     )
 
 

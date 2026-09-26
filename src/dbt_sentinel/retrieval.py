@@ -73,6 +73,9 @@ class Rule:
     path_globs: tuple[str, ...] = ()
     requires: tuple[tuple[str, object], ...] = ()
     source_file: str = ""
+    # "retrieved": ranked against the change, top-k cited. "checklist": never ranked,
+    # given to the agent for every change its prefilter admits. See PolicyPack.__init__.
+    applies_as: str = "retrieved"
 
     @property
     def searchable_text(self) -> str:
@@ -120,9 +123,18 @@ def _tokenize(text: str) -> list[str]:
     return tokens
 
 
+_APPLIES_AS = ("retrieved", "checklist")
+
+
 class PolicyPack:
     def __init__(self, rules: list[Rule]):
-        self._rules = rules
+        # Checklist rules (SQL review: join keys, nulls, types) apply to every SQL change
+        # whatever changed, so ranking them against a change summary is a category error.
+        # They are also kept out of `_rules` entirely, not just out of the ranking: IDF is
+        # computed over `_rules`, so merely being present would shift every retrieved
+        # rule's score and move the published retrieval metrics for no reason.
+        self._rules = [r for r in rules if r.applies_as == "retrieved"]
+        self._checklist = [r for r in rules if r.applies_as == "checklist"]
         self._by_id = {r.rule_id: r for r in rules}
         self._idf: dict[str, float] = {}
         self._vectors: dict[str, dict[str, float]] = {}
@@ -143,6 +155,12 @@ class PolicyPack:
             for raw in payload.get("rules") or []:
                 applies = raw.get("applies_to") or {}
                 requires = applies.get("requires") or {}
+                applies_as = raw.get("applies_as", "retrieved")
+                if applies_as not in _APPLIES_AS:
+                    raise ValueError(
+                        f"rule {raw.get('rule_id')!r} in {path.name} has applies_as "
+                        f"{applies_as!r}; use one of {', '.join(_APPLIES_AS)}."
+                    )
                 rules.append(
                     Rule(
                         rule_id=raw["rule_id"],
@@ -156,6 +174,7 @@ class PolicyPack:
                         path_globs=tuple(applies.get("path_globs") or ()),
                         requires=tuple(sorted(requires.items())),
                         source_file=path.name,
+                        applies_as=applies_as,
                     )
                 )
 
@@ -175,10 +194,21 @@ class PolicyPack:
 
     @property
     def rules(self) -> list[Rule]:
+        """Retrieved rules only; the checklist is `checklist_rules`."""
         return list(self._rules)
 
+    @property
+    def checklist_rules(self) -> list[Rule]:
+        return list(self._checklist)
+
     def get(self, rule_id: str) -> Rule | None:
+        """Any rule, retrieved or checklist: the agent may cite either."""
         return self._by_id.get(rule_id)
+
+    def checklist(self, changed: ChangedNode) -> list[Rule]:
+        """Checklist rules whose prefilter admits this change. Unranked, so all of them."""
+        kept, _ = self._prefilter(changed, self._checklist)
+        return kept
 
     # ---------- vectorising ----------
 
@@ -258,13 +288,15 @@ class PolicyPack:
 
     # ---------- retrieval ----------
 
-    def _prefilter(self, changed: ChangedNode) -> tuple[list[Rule], list[tuple[str, str]]]:
+    def _prefilter(
+        self, changed: ChangedNode, rules: list[Rule] | None = None
+    ) -> tuple[list[Rule], list[tuple[str, str]]]:
         kept: list[Rule] = []
         eliminated: list[tuple[str, str]] = []
         path = (changed.file.path or "").replace("\\", "/")
         kind = changed.node.kind.value
 
-        for rule in self._rules:
+        for rule in self._rules if rules is None else rules:
             if rule.node_kinds and kind not in rule.node_kinds:
                 eliminated.append((rule.rule_id, f"node kind {kind} not in {list(rule.node_kinds)}"))
                 continue

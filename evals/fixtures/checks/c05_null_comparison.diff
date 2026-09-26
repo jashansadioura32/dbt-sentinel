@@ -1,0 +1,16 @@
+diff --git a/models/orders.sql b/models/orders.sql
+index 1111111..2222222 100644
+--- a/models/orders.sql
++++ b/models/orders.sql
+@@ -49,8 +49,11 @@ final as (
+ 
+ 
+     left join order_payments
+         on orders.order_id = order_payments.order_id
+ 
++    -- drop orders that were cancelled before payment
++    where orders.status != 'returned' or orders.cancelled_at = null
++
+ )
+ 
+ select * from final

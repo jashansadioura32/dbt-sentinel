@@ -1,0 +1,102 @@
+# Ground truth for the SQL review checklist (policies/sql_quality.yml).
+#
+# READ THIS BEFORE CHANGING A LABEL. Same rule as ../labels.yml: these were written
+# before the agent ever ran on them. Editing a label to match what the agent says makes
+# the eval a mirror. Argue a disputed label in ../../LABEL_CHANGES.md instead.
+#
+# Each fixture is a `.diff` (what the PR changes) plus a `.sql` (the PR's full version
+# of the file, which the App fetches at the head commit and hands the agent through
+# get_model_sql).
+#
+# One true positive and one near miss per checklist rule. The near misses decide the
+# false-positive rate, and they're written to look as much like the violation as SQL
+# allows.
+#
+# Scoring counts only checklist rule_ids cited at medium or above. `expected_rule_ids:
+# []` asserts that no checklist rule is cited. Citing a governance rule (pii-tagging on
+# the grants fixtures, say) is neither rewarded nor punished here; the severity suite
+# scores those.
+
+fixtures:
+  - id: q01_join_fans_out
+    expected_rule_ids: [join-key-uniqueness]
+    rationale: >
+      `orders` gains a left join to the raw `payments` CTE on order_id. stg_payments is
+      one row per payment, and `unique` is tested on payment_id, not order_id, so every
+      order with a split payment is duplicated and `amount` is double-counted. The model
+      already has the correct shape two CTEs up (`order_payments`, grouped by order_id),
+      which is exactly what makes this a realistic mistake.
+
+  - id: q01n_join_on_unique_key
+    expected_rule_ids: []
+    rationale: >
+      The same shape of join, to stg_customers on customer_id, which carries both
+      `unique` and `not_null` tests. It's many-to-one and proven, so it can't fan out. A
+      reviewer that flags every new join fails here.
+
+  - id: q02_not_in_nullable
+    expected_rule_ids: [null-handling]
+    rationale: >
+      `not in (select customer_id from stg_orders ...)`. stg_orders.customer_id has no
+      not_null test (it isn't even documented there), so a single null customer_id among
+      returned orders makes the whole predicate unknown and the model returns zero rows.
+      It builds green with an empty table.
+
+  - id: q02n_not_exists
+    expected_rule_ids: []
+    rationale: >
+      The same filter as a correlated `not exists`, which is null-safe. Identical intent,
+      identical columns; only the construct differs.
+
+  - id: q03_one_sided_case_folding
+    expected_rule_ids: [collation-consistency]
+    rationale: >
+      A duplicate-customer flag compares `lower(other.first_name)` to an unfolded
+      `customers.first_name`. Any customer whose stored first name has a capital letter,
+      which is nearly all of them, never matches, so the flag is almost always false.
+
+  - id: q03n_both_sides_folded
+    expected_rule_ids: []
+    rationale: >
+      The same flag with lower() on both sides of both comparisons. Consistent
+      normalisation; nothing to report.
+
+  - id: q04_money_as_float
+    expected_rule_ids: [data-type-correctness]
+    rationale: >
+      `cast(amount as float) / 100` in stg_payments. Money in binary floating point
+      accumulates rounding error in every sum downstream: orders, customers, and the
+      finance month-end exposure. The explicit cast is the evidence the rule requires.
+
+  - id: q04n_money_as_decimal
+    expected_rule_ids: []
+    rationale: >
+      `cast(amount / 100 as number(38, 2))`: an explicit fixed-precision cast, which is
+      the fix the rule itself recommends. A reviewer keying on "cast" fires here and is
+      wrong.
+
+  - id: q05_where_nullifies_left_join
+    expected_rule_ids: [sql-correctness]
+    rationale: >
+      `where order_payments.total_amount > 0` after `left join order_payments`. For an
+      order with no payments the right side is null, the predicate is unknown, and the
+      row is dropped, so the left join is now an inner join. Orders awaiting payment
+      silently vanish from a model with three exposures.
+
+  - id: q05n_where_on_preserved_side
+    expected_rule_ids: []
+    rationale: >
+      A `where` in the same position, filtering `orders.status`, a column of the
+      preserved side. The left join's semantics are intact.
+
+  - id: q06_grant_to_public
+    expected_rule_ids: [sql-security]
+    rationale: >
+      A post-hook granting select on the customers mart, which holds names and lifetime
+      value, to role public. Every user in the account can read it.
+
+  - id: q06n_grant_to_named_role
+    expected_rule_ids: []
+    rationale: >
+      Access granted through the `grants:` config to a named role. That is the managed,
+      reviewable way the rule's guidance asks for.

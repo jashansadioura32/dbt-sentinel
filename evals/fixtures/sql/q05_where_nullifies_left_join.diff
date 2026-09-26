@@ -1,0 +1,13 @@
+diff --git a/models/orders.sql b/models/orders.sql
+index 1111111..2222222 100644
+--- a/models/orders.sql
++++ b/models/orders.sql
+@@ -51,6 +51,8 @@
+     left join order_payments
+         on orders.order_id = order_payments.order_id
+ 
++    where order_payments.total_amount > 0
++
+ )
+ 
+ select * from final

@@ -1,0 +1,16 @@
+diff --git a/models/customers.sql b/models/customers.sql
+index 1111111..2222222 100644
+--- a/models/customers.sql
++++ b/models/customers.sql
+@@ -64,6 +64,11 @@
+     left join customer_payments
+         on  customers.customer_id = customer_payments.customer_id
+ 
++    -- customers who never had an order returned
++    where customers.customer_id not in (
++        select customer_id from {{ ref('stg_orders') }} where status = 'returned'
++    )
++
+ )
+ 
+ select * from final
