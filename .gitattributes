@@ -1,0 +1,4 @@
+# Shell scripts run under sh, which chokes on CRLF: a Windows checkout with autocrlf
+# would otherwise break the hook with a "$'\r': command not found" error.
+integrations/vscode/post-commit text eol=lf
+integrations/vscode/*.sh text eol=lf

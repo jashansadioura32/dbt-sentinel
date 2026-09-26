@@ -1,0 +1,11 @@
+#!/bin/sh
+# dbt-sentinel post-commit hook. Runs the branch review in the background: the agent's
+# LLM call takes seconds, and a commit that blocks on it teaches people to use
+# --no-verify, which would switch the review off entirely.
+#
+# All output goes to .sentinel/review.md. The redirect matters as much as the `&`: git
+# waits for the hook's stdout to close, so a backgrounded job holding it still blocks.
+script="$(dirname "$0")/sentinel-review.sh"
+[ -f "$script" ] || exit 0
+sh "$script" >/dev/null 2>&1 </dev/null &
+exit 0
