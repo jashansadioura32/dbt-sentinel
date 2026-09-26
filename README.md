@@ -80,13 +80,25 @@ python -m dbt_sentinel \
 - Reaches 3 exposure(s): customer_success_churn, finance_month_end, exec_dashboard
 ```
 
-Exit code is 1, so it works as a CI gate. On your own project, point `--manifest` at
-`target/manifest.json` after `dbt compile` and pipe in `git diff origin/main...HEAD`.
+Exit code is 1, so it works as a CI gate. On your own project, run `dbt parse`, then
+`dbt-sentinel --since origin/main` from the project directory to review the current branch
+the way its PR will be reviewed.
+
+### In VS Code, on every commit
+
+A post-commit hook reviews the branch in the background, with the agent included, and
+opens `.sentinel/review.md` in the editor. The GitHub App is unaffected; this is a second
+entry point to the same CLI. Setup: [docs/LOCAL.md](docs/LOCAL.md).
+
+```bash
+sh /path/to/dbt-sentinel/integrations/vscode/install.sh   # run inside your dbt repo
+```
 
 | Flag | Does |
 |---|---|
-| `--manifest PATH` | `target/manifest.json` (required) |
-| `--diff PATH` | unified diff, or `-` for stdin (required) |
+| `--manifest PATH` | dbt manifest (default `target/manifest.json`) |
+| `--diff PATH` | unified diff, or `-` for stdin |
+| `--since REF` | diff the current branch against `REF` via git, instead of `--diff` |
 | `--fail-on {high,medium,low,never}` | exit 1 at or above this severity |
 | `--mermaid` | emit a blast-radius diagram per change |
 | `--explain` | show which policy rules were retrieved, with scores |

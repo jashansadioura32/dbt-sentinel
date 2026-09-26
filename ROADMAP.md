@@ -18,8 +18,12 @@ rather than merely deferred.
 - **Macro → model resolution.** A changed macro currently warns instead of resolving.
   Building a macro-to-consumer index from the manifest's `depends_on.macros` is
   tractable and would close a real gap.
-- **`--since` git integration** so the tool computes its own diff from a base ref
-  instead of being handed one.
+- ~~**`--since` git integration**~~ **Done.** `--since REF` diffs `REF...HEAD` itself,
+  and powers the VS Code post-commit hook (`docs/LOCAL.md`).
+- **Ship the policy pack inside the wheel.** It lives in `policies/` beside the source, so
+  only an editable install finds it. A non-editable install now warns that the agent ran
+  without rules, instead of silently dropping them. Packaging it as package data closes
+  the gap.
 
 - **Per-model hunk attribution in a shared schema.yml.** Created by the day-7 fix. When
   a hunk opens inside a `columns:` list, the owning model is not in the diff, so a

@@ -13,7 +13,8 @@ product. Optimise for correctness that can be proven, not for feature count.
 
 ## Non-goals — do not build these
 
-- Web UI of any kind. PR comments are the entire surface.
+- Web UI of any kind. PR comments are the entire surface, plus the local post-commit
+  hook (`integrations/vscode/`), which is the same CLI writing Markdown to a file, not a UI.
 - Multi-warehouse support. Snowflake-flavoured SQL assumptions are fine.
 - Data catalog, lineage browser, or test generator.
 - Column-level lineage. Model-level reach only.
@@ -79,7 +80,7 @@ GitHub webhook
 ## Current state
 
 Days 1-10 complete, plus a check layer (3 phases) and the day-7 iteration round.
-180 tests pass.
+216 tests pass.
 
 - `models.py` — domain types (Node, ChangedFile, ChangedNode, BlastRadius)
 - `lineage.py` — manifest parsing, node graph, BFS blast radius
@@ -89,7 +90,8 @@ Days 1-10 complete, plus a check layer (3 phases) and the day-7 iteration round.
 - `agent.py` — reviewer agent, tool-calling, structured output, degradation paths
 - `checks.py` — four deterministic lint checks, a peer of the blast radius
 - `github.py` / `webhook.py` / `pipeline.py` — the GitHub App
-- `cli.py` — entrypoint with `--fail-on` exit codes
+- `cli.py` — entrypoint with `--fail-on` exit codes; `--since REF` diffs via git
+- `integrations/vscode/` — post-commit hook + task for local review (`docs/LOCAL.md`)
 - `evals/` — 30 labelled severity fixtures + 8 check fixtures, four harnesses
 - `docs/` — PRD, architecture + ADRs, eval report, checks spec, deployment
 

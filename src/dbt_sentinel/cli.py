@@ -1,5 +1,9 @@
 """CLI: `python -m dbt_sentinel --manifest target/manifest.json --diff pr.diff`
 
+Or, from inside a dbt repo, `dbt-sentinel --since origin/main` to review the current
+branch the way its PR will be reviewed. This is what the VS Code hook in
+`integrations/vscode/` runs after each commit.
+
 Exit codes, because CI needs to tell a finding from a misconfiguration:
 
     0  Reviewed. Nothing at or above --fail-on.
@@ -14,6 +18,7 @@ long before it ever reports a real breaking change.
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,16 +42,23 @@ def _run_agent(assessments: list, lineage: Lineage, policy_dir: str | None) -> s
     from .retrieval import PolicyPack
 
     pack = None
+    pack_note = ""
     try:
         pack = PolicyPack.load(policy_dir)
         pack.load_cache()
-    except (FileNotFoundError, ValueError):
-        pass  # the agent still works without policy retrieval, just with less to cite
+    except (FileNotFoundError, ValueError) as exc:
+        # The agent still runs, but with no rule_ids to cite. Said out loud because a
+        # non-editable install has no pack beside it, and a review that silently lost
+        # its governance rules looks identical to one where no rule applied.
+        pack_note = (
+            f"\n> ⚠️ Policy pack unavailable ({exc}). The agent ran without governance "
+            f"rules. Pass --policies DIR, or install from a clone with `pip install -e`.\n"
+        )
 
     # ReviewerAgent.review never raises; every failure path returns a degraded result
     # that the renderer states plainly.
     result = ReviewerAgent(lineage, pack).review(assessments)
-    rendered = render_agent_findings(result)
+    rendered = render_agent_findings(result) + pack_note
 
     # Same cost and latency the PR comment footer carries. A local run that cannot tell
     # you what it spent makes the published per-PR figure unverifiable.
@@ -94,6 +106,81 @@ def _explain_retrieval(changes: list, policy_dir: str | None) -> str:
     return "\n".join(lines)
 
 
+class GitError(Exception):
+    """git could not produce the diff. Always an exit-2 misconfiguration, never a finding."""
+
+
+def _git(*args: str) -> str:
+    try:
+        proc = subprocess.run(
+            ["git", *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except FileNotFoundError as exc:
+        raise GitError("git is not on PATH. Install git, or pass a diff file with --diff.") from exc
+    if proc.returncode != 0:
+        raise GitError(proc.stderr.strip() or f"`git {' '.join(args)}` exited {proc.returncode}")
+    return proc.stdout
+
+
+_DBT_SOURCE_SUFFIXES = {".sql", ".yml", ".yaml", ".csv", ".md", ".py"}
+
+
+def _last_edited(ref: str) -> datetime:
+    """When the branch's changed files were last edited on disk.
+
+    This, not the commit time, is what a local manifest must postdate. The local
+    workflow is edit, `dbt parse`, commit, so the commit is always seconds newer than a
+    perfectly fresh manifest. Comparing against it warned on every commit (found live on
+    jeffle-shop: "compiled 0.0h before the change"), and a warning that always fires
+    teaches people to ignore the one time it is real. An edit made after the last parse
+    is what makes the graph stale, and that is what file mtimes record.
+
+    Only files dbt parses count. A committed `target/manifest.json` is itself in the diff
+    and is always written a moment after its own `generated_at`, so counting it would
+    make every review look stale; a `.gitignore` edit cannot change the graph at all.
+
+    Falls back to the head commit time when no such file is left on disk (a branch that
+    only deletes).
+    """
+    names = _git("diff", "--name-only", "--no-renames", "--relative", f"{ref}...HEAD")
+    mtimes = [
+        path.stat().st_mtime
+        for path in map(Path, names.splitlines())
+        if path.suffix in _DBT_SOURCE_SUFFIXES and "target" not in path.parts and path.is_file()
+    ]
+    if mtimes:
+        return datetime.fromtimestamp(max(mtimes), tz=timezone.utc)
+    return datetime.fromisoformat(_git("log", "-1", "--format=%cI", "HEAD").strip())
+
+
+def _git_diff_since(ref: str) -> tuple[str, datetime]:
+    """The branch's diff against `ref`, and when its changed files were last edited.
+
+    Three dots, not two: `ref...HEAD` diffs from the merge base, which is what the PR
+    will show. A two-dot diff would also report every commit merged into `ref` since the
+    branch forked, as if this branch had reverted them.
+
+    `--relative` scopes paths to the working directory, so running from a dbt project in
+    a monorepo subfolder yields the project-relative paths the manifest records.
+    """
+    try:
+        _git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+    except GitError as exc:
+        raise GitError(
+            f"unknown ref {ref!r} ({exc}). Run `git fetch`, or pass a ref that exists "
+            f"locally, e.g. `--since main`."
+        ) from exc
+    diff = _git("diff", "--no-color", "--no-ext-diff", "--relative", f"{ref}...HEAD")
+    # Feeds the staleness check, which matters more locally than in CI: the manifest is
+    # whatever `dbt parse` last wrote, and a stale graph produces a clean-looking review
+    # with shrunken reach.
+    return diff, _last_edited(ref)
+
+
 def _force_utf8_stdout() -> None:
     """The rendered comment contains emoji severity badges and arrows.
 
@@ -113,8 +200,18 @@ def _force_utf8_stdout() -> None:
 def main(argv: list[str] | None = None) -> int:
     _force_utf8_stdout()
     parser = argparse.ArgumentParser(prog="dbt-sentinel")
-    parser.add_argument("--manifest", required=True, help="path to target/manifest.json")
-    parser.add_argument("--diff", required=True, help="unified diff file, or - for stdin")
+    parser.add_argument(
+        "--manifest",
+        default="target/manifest.json",
+        help="path to the dbt manifest (default: target/manifest.json)",
+    )
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--diff", help="unified diff file, or - for stdin")
+    source.add_argument(
+        "--since",
+        metavar="REF",
+        help="review the current branch against REF (e.g. origin/main), via git",
+    )
     parser.add_argument("--mermaid", action="store_true", help="emit a diagram per change")
     parser.add_argument(
         "--fail-on",
@@ -159,7 +256,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    if args.diff == "-":
+    last_edited_at = None
+    if args.since:
+        try:
+            diff_text, last_edited_at = _git_diff_since(args.since)
+        except GitError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+    elif args.diff == "-":
         diff_text = sys.stdin.read()
     else:
         try:
@@ -174,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
 
-    changed_at = None
+    changed_at = last_edited_at
     if args.changed_at:
         try:
             changed_at = datetime.fromisoformat(args.changed_at.replace("Z", "+00:00"))

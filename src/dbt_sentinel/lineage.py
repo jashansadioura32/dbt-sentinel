@@ -42,7 +42,8 @@ class Lineage:
         path = Path(manifest_path)
         if not path.exists():
             raise ManifestError(
-                f"manifest not found at {path}. Run `dbt compile` or `dbt docs generate` first."
+                f"manifest not found at {path}. Run `dbt parse` (fastest; runs no warehouse "
+                f"queries) or `dbt compile` first, or pass --manifest."
             )
         with path.open(encoding="utf-8") as fh:
             return cls.from_manifest(json.load(fh))
@@ -76,7 +77,8 @@ class Lineage:
         return (
             f"Manifest was compiled {hours:.1f}h before the change under review "
             f"({self.generated_at.isoformat()}). Models added since are invisible and "
-            f"blast radius is under-reported. Re-run `dbt compile` on the base branch."
+            f"blast radius is under-reported. Re-run `dbt parse` locally, or `dbt compile` on "
+            f"the base branch in CI."
         )
 
     @staticmethod

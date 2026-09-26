@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dbt-sentinel: review branch",
+      "type": "process",
+      "command": "sh",
+      "windows": { "command": "C:\\Program Files\\Git\\bin\\sh.exe" },
+      "args": ["-c", "sh \"$(git rev-parse --git-path hooks)/sentinel-review.sh\""],
+      "problemMatcher": [],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    }
+  ]
+}
