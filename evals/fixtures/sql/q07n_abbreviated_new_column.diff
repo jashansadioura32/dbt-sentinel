@@ -1,0 +1,15 @@
+diff --git a/models/customers.sql b/models/customers.sql
+index 1111111..2222222 100644
+--- a/models/customers.sql
++++ b/models/customers.sql
+@@ -54,7 +54,9 @@
+         customer_orders.first_order,
+         customer_orders.most_recent_order,
+         customer_orders.number_of_orders,
+-        customer_payments.total_amount as customer_lifetime_value
++        customer_payments.total_amount as customer_lifetime_value,
++        customer_payments.total_amount
++            / nullif(customer_orders.number_of_orders, 0) as avg_order_amt
+ 
+     from customers
+ 

@@ -390,7 +390,8 @@ it declares.
 and useful answer for a routine PR.
 
 SQL review. For each changed SQL model, the prompt lists a checklist: join-key \
-uniqueness, null handling, collation, data types, query correctness, SQL security. \
+uniqueness, null handling, collation, data types, query correctness, column-name \
+spelling, SQL security. \
 Apply it to the model's full query (get_model_sql), not only the changed lines, but \
 report only problems this PR introduces or changes. Each checklist rule names the \
 evidence it needs; flag only with that evidence in hand. In particular:

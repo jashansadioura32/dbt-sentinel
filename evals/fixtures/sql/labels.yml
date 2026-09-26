@@ -12,7 +12,8 @@
 # false-positive rate, and they're written to look as much like the violation as SQL
 # allows.
 #
-# Scoring counts only checklist rule_ids cited at medium or above. `expected_rule_ids:
+# Scoring counts only checklist rule_ids, cited at medium or above (low or above for
+# column-name-spelling, the one low-severity rule). `expected_rule_ids:
 # []` asserts that no checklist rule is cited. Citing a governance rule (pii-tagging on
 # the grants fixtures, say) is neither rewarded nor punished here; the severity suite
 # scores those.
@@ -100,3 +101,19 @@ fixtures:
     rationale: >
       Access granted through the `grants:` config to a named role. That is the managed,
       reviewable way the rule's guidance asks for.
+
+  - id: q07_misspelled_new_column
+    expected_rule_ids: [column-name-spelling]
+    rationale: >
+      A new output column `avrage_order_value` on the customers mart. It's a plain
+      misspelling of "average", and it's new in this PR, so fixing it now is free. After
+      merge, every dashboard built on it would reference the typo and the fix becomes a
+      breaking rename.
+
+  - id: q07n_abbreviated_new_column
+    expected_rule_ids: []
+    rationale: >
+      The same column named `avg_order_amt`. Both `avg` and `amt` are conventional
+      abbreviations, not misspellings, and the rule says not to flag them. A spell checker
+      that doesn't know data-naming conventions fires on this, and that noise is how the
+      rule would get muted.

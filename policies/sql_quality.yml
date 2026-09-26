@@ -148,6 +148,31 @@ rules:
       conditions on the outer-joined table into the `on` clause, use `union all` unless
       deduplication is intended, and guard division with `nullif`.
 
+  - rule_id: column-name-spelling
+    title: Misspelled name on a column this PR adds to the model's output
+    severity: low
+    applies_as: checklist
+    applies_to:
+      node_kinds: [model, snapshot]
+      path_globs: ["models/*.sql", "models/**/*.sql", "models/*.yml", "models/**/*.yml", "snapshots/*.sql", "snapshots/**/*.sql"]
+    description: >
+      A column name in the model's final select is an interface. Once it merges, every
+      consumer and dashboard references the typo, and fixing it later is a breaking
+      rename. Before merge, fixing it costs nothing. Only names this PR introduces count:
+      a new output column, a new alias, or a new `- name:` under `columns:`. A
+      pre-existing misspelling is out of scope, because renaming it now breaks consumers
+      and belongs in its own planned change.
+    keywords: [spelling, typo, misspelled, column name, alias]
+    example_violation: >
+      `sum(amount) as total_ammount` added to a mart, or `custmer_id` added to schema.yml.
+    guidance: >
+      Flag only a clear misspelling of an English word or of a column name used elsewhere
+      in the same model (`custmer_id` beside `customer_id`). Do NOT flag: conventional
+      abbreviations (`cust`, `amt`, `qty`, `num`, `dt`, `ts`, `ltv`, `pct`), names
+      carried over unchanged from the source system, product or domain terms, or naming
+      *style* (snake_case vs camelCase belongs to naming-convention). Name the column and
+      the corrected spelling. Severity is always low.
+
   - rule_id: sql-security
     title: SQL that widens access or runs untrusted input
     severity: high
