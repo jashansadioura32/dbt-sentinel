@@ -111,7 +111,7 @@ sh /path/to/dbt-sentinel/integrations/vscode/install.sh   # run inside your dbt 
 | Code | Means |
 |---|---|
 | `0` | Reviewed. Nothing at or above `--fail-on`. |
-| `1` | Reviewed. Findings at or above `--fail-on`. |
+| `1` | Reviewed. Findings at or above `--fail-on`, or an exposed secret at any threshold. |
 | `2` | Could not run: unreadable manifest, unreadable diff, malformed argument. |
 
 The `1` / `2` split is deliberate. A pipeline that reports a missing manifest as a failed

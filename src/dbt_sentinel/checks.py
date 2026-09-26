@@ -78,7 +78,7 @@ class CheckSpec:
     check_id: str
     fn: Check
     path_globs: tuple[str, ...]
-    category: str  # "structure" | "testing" | "portability"
+    category: str  # "structure" | "testing" | "portability" | "correctness"
 
 
 def _added(file: ChangedFile) -> tuple[str, ...]:
@@ -312,11 +312,61 @@ def check_cross_layer_reference(
     return findings
 
 
+# ---------------------------------------------------------------------------
+# null-comparison
+# ---------------------------------------------------------------------------
+
+# `!=` and `<>` first, then a bare `=` not preceded by another comparison character, so
+# `>= null` is not misread as `= null` and `!=` is not matched twice.
+_NULL_COMPARISON = re.compile(r"(!=|<>|(?<![<>!=])=)\s*null\b", re.IGNORECASE)
+_ASSIGNMENT = re.compile(r"\bset\b", re.IGNORECASE)
+
+
+def check_null_comparison(
+    file: ChangedFile, node: Node | None, ctx: CheckContext
+) -> list[CheckFinding]:
+    """`x = null` is never true in SQL, not even when x is null.
+
+    The filter silently matches no rows, and the model still builds, so the only symptom
+    is a row count that's quietly too low. This needs no judgment, which is why it's a
+    check rather than part of the agent's `null-handling` policy.
+    """
+    if not file.path.endswith(".sql"):
+        return []
+
+    for line in _added(file):
+        if _is_sql_comment(line):
+            continue
+        # Inline comments and Jinja go first: `-- never use = null` is advice, and
+        # `{% if x != none %}` is Jinja, where comparing with none is correct.
+        code = re.sub(r"\{\{.*?\}\}|\{%.*?%\}", " ", line.split("--", 1)[0])
+        match = _NULL_COMPARISON.search(code)
+        # `update ... set col = null` assigns rather than compares, and is correct.
+        if match is None or _ASSIGNMENT.search(code[: match.start()]):
+            continue
+        operator = match.group(1)
+        fixed = "is not null" if operator in ("!=", "<>") else "is null"
+        return [CheckFinding(
+            check_id="null-comparison",
+            title="Comparison with NULL using an operator",
+            severity="medium",
+            path=file.path,
+            node_name=node.name if node else None,
+            message=(
+                f"`{match.group(0).strip()}` is never true in SQL, for any value, "
+                f"including null. The condition silently matches no rows."
+            ),
+            suggestion=f"Write `{fixed}` instead of `{match.group(0).strip()}`.",
+        )]
+    return []
+
+
 CHECKS: tuple[CheckSpec, ...] = (
     CheckSpec("missing-schema-entry", check_missing_schema_entry, ("models/**",), "structure"),
     CheckSpec("deprecated-tests-key", check_deprecated_tests_key, ("models/**",), "testing"),
     CheckSpec("hardcoded-relation", check_hardcoded_relation, ("models/**",), "portability"),
     CheckSpec("cross-layer-reference", check_cross_layer_reference, ("models/**",), "structure"),
+    CheckSpec("null-comparison", check_null_comparison, ("models/**",), "correctness"),
 )
 
 

@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from dbt_sentinel.checks import CHECKS, run_checks  # noqa: E402
 from dbt_sentinel.diff import parse_diff, resolve_changes  # noqa: E402
 from dbt_sentinel.lineage import Lineage  # noqa: E402
+from dbt_sentinel.security import scan_secrets  # noqa: E402
 
 EVALS = Path(__file__).resolve().parent
 FIXTURES = EVALS / "fixtures" / "checks"
@@ -54,7 +55,11 @@ EXPECTED_ON_SEVERITY_FIXTURES = {
 def _findings_for(diff_path: Path, lineage: Lineage) -> list:
     text = diff_path.read_text(encoding="utf-8")
     changes, _ = resolve_changes(text, lineage)
-    return run_checks(parse_diff(text), changes, lineage)
+    files = parse_diff(text)
+    # Secrets are scored here too, as `exposed-secret`. They aren't a check, but they are
+    # a deterministic finding with the same TP/near-miss discipline, and the silence
+    # score on the severity fixtures matters even more for a finding that fails the PR.
+    return [*run_checks(files, changes, lineage), *scan_secrets(files)]
 
 
 def run() -> dict:

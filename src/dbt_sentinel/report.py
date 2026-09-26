@@ -182,6 +182,33 @@ def render_checks(findings: list) -> str:
     return "\n".join(lines)
 
 
+def render_security(findings: list) -> str:
+    """Render exposed secrets first and loudest: the only finding that fails the status
+    regardless of reach. Values arrive already redacted; nothing here can un-redact one.
+    """
+    if not findings:
+        return ""
+
+    lines = [
+        "## Security",
+        "",
+        "> 🔴 **Exposed credential. This fails the check.** Rotate it now: it's already in "
+        "this branch's git history, so deleting the line in a follow-up commit doesn't "
+        "un-leak it.",
+        "",
+    ]
+    for finding in findings:
+        lines.append(f"- `{finding.path}`: {finding.kind} (`{finding.preview}`)")
+    lines += [
+        "",
+        "**Fix:** rotate the credential, then read it from the environment instead, e.g. "
+        "`password: \"{{ env_var('DBT_PASSWORD') }}\"`. To remove it from history, rewrite "
+        "the branch before merging.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def render_agent_findings(result) -> str:
     """Render `AgentResult` deterministically. The LLM never writes this comment.
 

@@ -7,7 +7,7 @@ branch the way its PR will be reviewed. This is what the VS Code hook in
 Exit codes, because CI needs to tell a finding from a misconfiguration:
 
     0  Reviewed. Nothing at or above --fail-on.
-    1  Reviewed. Findings at or above --fail-on.
+    1  Reviewed. Findings at or above --fail-on, or an exposed secret (any threshold).
     2  Could not run: unreadable manifest, unreadable diff, malformed argument.
 
 The 1/2 split is the load-bearing one. A pipeline that reports a missing manifest as a
@@ -26,7 +26,14 @@ from pathlib import Path
 from .checks import run_checks
 from .diff import parse_diff, resolve_changes
 from .lineage import Lineage, ManifestError
-from .report import build_assessments, render_checks, render_markdown, render_mermaid
+from .report import (
+    build_assessments,
+    render_checks,
+    render_markdown,
+    render_mermaid,
+    render_security,
+)
+from .security import scan_secrets
 
 
 def _run_agent(assessments: list, lineage: Lineage, policy_dir: str | None) -> str:
@@ -303,11 +310,18 @@ def main(argv: list[str] | None = None) -> int:
     if staleness := lineage.staleness_warning(changed_at):
         print(f"> ⚠️ **Stale manifest.** {staleness}\n")
 
+    # Not skipped by --no-checks: it isn't a check, and it's the one finding that needs
+    # action whether or not the change is ever merged.
+    files = parse_diff(diff_text)
+    secrets = scan_secrets(files)
+    if section := render_security(secrets):
+        print(section)
+
     print(render_markdown(assessments, unresolved))
 
     if not args.no_checks:
         # Its own section, never folded into severity above: a lint finding has no reach.
-        if section := render_checks(run_checks(parse_diff(diff_text), changes, lineage)):
+        if section := render_checks(run_checks(files, changes, lineage)):
             print()
             print(section)
 
@@ -325,6 +339,10 @@ def main(argv: list[str] | None = None) -> int:
         print(_explain_retrieval(changes, args.policies))
 
     if args.fail_on != "never":
+        # A secret fails at every threshold. It outranks HIGH: HIGH is a consumer
+        # breaking on merge, a secret is a credential already compromised on push.
+        if secrets:
+            return 1
         threshold = {"high": 2, "medium": 1, "low": 0}[args.fail_on]
         order = {"high": 2, "medium": 1, "low": 0}
         if any(order[a.severity] >= threshold for a in assessments):
