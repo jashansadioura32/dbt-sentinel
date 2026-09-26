@@ -100,6 +100,15 @@ def test_since_diffs_from_the_merge_base_not_the_tip(repo, capsys):
     assert "stg_customers" not in capsys.readouterr().out
 
 
+def test_a_utc_commit_date_does_not_crash(repo, capsys, monkeypatch):
+    """Regression, found by CI's 3.10 run: git writes a UTC committer date as `...Z`,
+    which `fromisoformat` rejects before 3.11, so the CLI crashed with a traceback
+    instead of reviewing. A branch with no changed files takes the commit-time path."""
+    monkeypatch.setenv("GIT_COMMITTER_DATE", "2026-09-26T10:00:00+0000")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "utc commit")
+    assert main(["--manifest", MANIFEST, "--since", "main"]) == 0
+
+
 def test_branch_with_no_changes_says_so(repo, capsys):
     assert main(["--manifest", MANIFEST, "--since", "main"]) == 0
     assert "No dbt nodes changed" in capsys.readouterr().out

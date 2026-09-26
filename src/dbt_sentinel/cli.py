@@ -154,7 +154,10 @@ def _last_edited(ref: str) -> datetime:
     ]
     if mtimes:
         return datetime.fromtimestamp(max(mtimes), tz=timezone.utc)
-    return datetime.fromisoformat(_git("log", "-1", "--format=%cI", "HEAD").strip())
+    # Epoch seconds, not `%cI`: git writes a UTC committer date as `...Z`, which
+    # `fromisoformat` rejects before Python 3.11. It crashed CI's 3.10 runner, which is
+    # set to UTC, while passing on a +05:30 dev machine.
+    return datetime.fromtimestamp(int(_git("log", "-1", "--format=%ct", "HEAD")), tz=timezone.utc)
 
 
 def _git_diff_since(ref: str) -> tuple[str, datetime]:
