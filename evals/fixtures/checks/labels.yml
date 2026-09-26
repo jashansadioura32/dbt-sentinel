@@ -7,7 +7,8 @@
 # implementation happens to emit, the eval becomes a mirror and the published precision
 # means nothing.
 #
-# Each check has exactly two fixtures:
+# Each check (and `exposed-secret`, which gates the merge but is scored here too) has
+# exactly two fixtures:
 #   cNN   true positive — the check must fire
 #   cNNn  near miss     — the idiomatic twin that must stay silent
 #
@@ -77,3 +78,36 @@ fixtures:
       The same ref() written the correct way round — a mart consuming staging. This is the
       normal shape of every dbt project and must stay silent. Near miss because the added
       line is near-identical; only the direction differs.
+
+  - id: c05_null_comparison
+    expected_check_ids: [null-comparison]
+    rationale: >
+      `orders.cancelled_at = null` is never true in SQL, not even when cancelled_at is null,
+      so the `or` branch meant to keep cancelled orders is dead and those rows are silently
+      dropped. The model builds, the row count just shrinks. No judgment is involved: the
+      comparison is wrong for every value, which is why this is a check and not a policy.
+
+  - id: c05n_is_null
+    expected_check_ids: []
+    rationale: >
+      The same filter written correctly with `is null`, plus the three shapes a sloppy
+      `= null` regex trips on: a comment that quotes the wrong form, `nullif(...) is not
+      null`, and a Jinja `!= none` inside `{% %}`. `coalesce(..., 0) >= 0` is there because
+      it's a comparison on the same line as null-handling code. All of it is correct SQL.
+
+  - id: c06_exposed_secret
+    expected_check_ids: [exposed-secret]
+    rationale: >
+      A literal Snowflake password in profiles.yml, and an AWS access key pair hardcoded
+      in a new macro. Neither file is under models/, which is the point: the check layer
+      only reads models/**, and secrets leak through profiles, project config and macros.
+      The AWS key is AWS's own documentation example, so the fixture is safe to publish.
+
+  - id: c06n_env_var_secret
+    expected_check_ids: []
+    rationale: >
+      The correct form: credentials read through `{{ env_var(...) }}`, and a token left
+      as an angle-bracket placeholder. The schema.yml half documents `password_hash` and
+      `api_token_last_rotated_at` columns, whose names contain credential words but
+      are column names, not assignments. A keyword grep for "password" fires on every
+      line of this fixture and is wrong on all of them.
