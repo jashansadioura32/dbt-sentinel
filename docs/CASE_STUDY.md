@@ -10,7 +10,7 @@ published whatever they say, and the two worst failures are named before the suc
 | **Stack** | Python 3.10+, one runtime dependency (`pyyaml`), an LLM (gpt-4o) for judgment only |
 | **Scale** | 13 modules, 203 tests, 30 labelled eval fixtures, 14 governance rules |
 | **Status** | Deployed. Posted a correct HIGH review on a real PR on 2026-09-25 |
-| **Docs** | [PRD](PRD.md) · [Architecture + ADRs](ARCHITECTURE.md) · [Eval report](EVAL_REPORT.md) · [Deployment](DEPLOYMENT.md) · [Deployment log](DEPLOYMENT_LOG.md) |
+| **Docs** | [PRD](PRD.md) · [Architecture + ADRs](ARCHITECTURE.md) · [Eval report](EVAL_REPORT.md) · [Deployment](DEPLOYMENT.md) |
 
 ---
 
@@ -55,7 +55,7 @@ the eval suite drove the fix rather than ratifying it.
 | Retrieval precision@3 | 0.708 | 0.636 | > 0.60 — met |
 | Retrieval recall@3 | 0.630 | **0.778** | — |
 | Agent vs. baseline | unmeasured | **unmeasured** | needs API credits |
-| Deployed to a real PR | not done | **done** | [log](DEPLOYMENT_LOG.md) |
+| Deployed to a real PR | not done | **done** | [what it found](DEPLOYMENT.md#what-the-first-live-deploy-found) |
 
 Recall 0.588 at precision 0.909 is the honest shape of a structural-only scorer: when it
 fires it is almost always right, and it still misses about 40% of what a reviewer should
@@ -136,7 +136,7 @@ is now failure mode #1.
 
 **A non-goals list written before any code.** The highest-value twenty minutes of the
 project: every later scope argument resolved by pointing at it, and the rejected ideas went
-to `ROADMAP.md` instead of into the build.
+to a roadmap instead of into the build.
 
 ## The two worst failures — found on day 3, fixed on day 7
 
@@ -160,8 +160,8 @@ block went 8/10 to 10/10 and the FPR to 0.000.
 ## What the deployment caught
 
 The GitHub App was built and tested against a fake client, and shipping it to Railway
-surfaced four bugs that every one of 196 local tests had passed. Full record in the
-[deployment log](DEPLOYMENT_LOG.md); two are worth naming here.
+surfaced four bugs that every one of 196 local tests had passed. All four are summarised in
+[DEPLOYMENT.md](DEPLOYMENT.md#what-the-first-live-deploy-found); two are worth naming here.
 
 **The webhook rejected 100% of deliveries with 422.** `from __future__ import annotations`
 turned the handler's annotations into strings, and FastAPI resolves those against module

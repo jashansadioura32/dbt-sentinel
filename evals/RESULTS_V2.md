@@ -115,8 +115,8 @@ on this fixture.
 This is a deliberate trade and it is the right side of it: before the fix `s03` produced
 no output at all, which also meant `b03` (a real HIGH) produced no output. Trading four
 silent drops for one over-cautious medium is the trade design rule 4 asks for. Closing
-it properly needs per-model hunk attribution in a shared schema.yml, which is parked in
-[ROADMAP.md](../ROADMAP.md).
+it properly needs per-model hunk attribution in a shared schema.yml, which is listed under
+[Known limitations](../README.md#known-limitations).
 
 ## What did not change, and why that matters
 
@@ -177,5 +177,5 @@ traversal and regex cannot see:
 fixed rather than before.** Recall 0.588 at precision 0.909 is the ceiling of a
 structural-only scorer: when it fires it is almost always right, and it still misses
 about 40% of what a reviewer should catch. Whether the agent beats that is measured in
-`RESULTS_V1.md`, which is still unwritten because the agent arm has never run — see
-[../ROADMAP.md](../ROADMAP.md).
+`RESULTS_V1.md`, which is still unwritten because the agent arm has never run. (The agent's first live measurement, on the SQL
+checklist, is in [SQL_POLICY_RESULTS.md](SQL_POLICY_RESULTS.md).)

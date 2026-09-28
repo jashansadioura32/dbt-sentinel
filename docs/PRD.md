@@ -67,7 +67,8 @@ lineage. A PR comment and a commit status. Governance rules as a YAML pack.
 
 That list was the highest-value twenty minutes of the project. Every later scope argument
 resolved by pointing at it, and the ideas it rejected went to
-[ROADMAP.md](../ROADMAP.md) instead of into the build.
+a roadmap instead of into the build; what's still open is in the README's
+[What's next](../README.md#whats-next).
 
 ## What was cut, and why
 

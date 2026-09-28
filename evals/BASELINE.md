@@ -205,7 +205,7 @@ did not perturb the measurement it will later be compared against.
 | `s02_incremental_no_full_refresh` | `incremental-safety` | Diff says `* 1.1`; the rule's vocabulary is `full_refresh`, `backfill`, `is_incremental` — no lexical overlap. **The clearest case for semantic matching in the suite.** |
 
 Residual noise: 6 of 11 no-rule fixtures still draw a rule, mostly `pii-tagging` firing
-on `first_name`/`last_name` context lines in a whitespace diff. Parked in ROADMAP.md
+on `first_name`/`last_name` context lines in a whitespace diff. Parked on the roadmap
 rather than tuned further — day 4 is measurement, and tuning against the eval set is how
 a retriever gets overfitted to 30 fixtures.
 
@@ -276,8 +276,7 @@ radius rather than a component of it.
 
 Checks read **only added diff lines**, never whole files. A check cannot see that a
 pre-existing line is wrong, only that a new one is. That is deliberate — it is what makes
-the grandfathering machinery a brownfield reviewer needs unnecessary here (see
-[../ROADMAP.md](../ROADMAP.md) for the precondition that would change it) — but it is a
+the grandfathering machinery a brownfield reviewer needs unnecessary here — but it is a
 real limit on what this layer can catch.
 
 ## What is not measured here

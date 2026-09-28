@@ -8,7 +8,7 @@
 # Globs list the top level explicitly (`models/*.sql` beside `models/**/*.sql`):
 # fnmatch's `**/` needs at least one directory, so `models/**/*.sql` alone never matches
 # `models/orders.sql`. The retrieved rules in the other files still have that gap; see
-# ROADMAP.md.
+# "What's next" in the README.
 #
 # What is NOT here, and why: anything a pattern can decide. `= null` is the
 # `null-comparison` check, and exposed credentials are `security.py`. A rule belongs in

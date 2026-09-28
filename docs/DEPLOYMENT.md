@@ -144,3 +144,19 @@ deleted model's blast radius is computed against a graph the deletion already le
 | `cryptography` ImportError | `pip install -e ".[server]"` |
 | Review says "no manifest found" | No `target/manifest.json` on the base branch |
 | Comment says agent skipped | `OPENAI_API_KEY` not set on the server (reviews still work) |
+
+## What the first live deploy found
+
+Four bugs, each of which passed the full local suite, surfaced in the first deploy
+(2026-09-25, reviewing [jeffle-shop](https://github.com/jashansadioura32/jeffle-shop)).
+Every one is now a regression test.
+
+| Bug | Why local tests missed it | Test |
+|---|---|---|
+| Build failed: `License file does not exist`. `license = { file = "LICENSE" }` hard-fails when the build context omits the file, which Nixpacks' upload does. Now PEP 639 form (`license = "MIT"`). `nixpacks.toml` also pins the install so the server extras can't be silently skipped | `pip install -e .` never rebuilds metadata from a fresh context | `tests/test_packaging.py` builds a real wheel |
+| Every delivery 422. Under `from __future__ import annotations`, FastAPI resolved `Request` against module globals, found nothing, and bound it as a query parameter | Every webhook test called `handle_event` directly; none booted the HTTP layer | `tests/test_webhook_http.py` |
+| A mangled private key returned a bare 500, and GitHub answers a 500 by redelivering, so a bad secret became a retry storm. Now it names the cause and the fix | The key only gets mangled on a host that flattens multi-line secrets | `tests/test_webhook_http.py` (mangled key) |
+| JWT `iss` was a string (the App ID comes from an env var); GitHub requires an integer and rejected every token request | The JWT was well formed and correctly signed; only GitHub's claim validation checks the type | `tests/test_day8.py`, `tests/test_webhook_http.py` |
+
+Fixing the third bug made the fourth findable: once misconfigurations stopped all looking
+like the same bare 500, each named itself on the first attempt.
