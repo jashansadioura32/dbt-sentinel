@@ -9,9 +9,9 @@ models it changes, walks the dependency graph to see what they feed, and posts a
 with the severity, the affected models and dashboards, and a suggested fix. It fails the
 check only when something downstream will actually break.
 
-[![Watch the 21-second demo](docs/assets/demo.png)](docs/assets/demo.mp4)
+[![Watch the 21-second demo](docs/assets/demo.png)](https://github.com/jashansadioura32/dbt-sentinel/raw/main/docs/assets/demo.mp4)
 
-<p align="center"><a href="docs/assets/demo.mp4"><b>▶ Watch the 21-second demo (with sound)</b></a></p>
+<p align="center"><a href="https://github.com/jashansadioura32/dbt-sentinel/raw/main/docs/assets/demo.mp4"><b>▶ Watch the 21-second demo (with sound)</b></a></p>
 
 ---
 
