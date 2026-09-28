@@ -3,6 +3,19 @@ name = "dbt-sentinel"
 version = "0.2.0"
 description = "Blast-radius review for dbt pull requests"
 requires-python = ">=3.10"
+authors = [{ name = "Jashan Sadioura" }]
+keywords = ["dbt", "data-engineering", "code-review", "github-app", "lineage", "analytics-engineering"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Software Development :: Quality Assurance",
+]
+# No `readme = "README.md"`: like the LICENSE file before it, a declared readme makes the
+# build fail wherever the build context omits it. tests/test_packaging.py pins that.
 # SPDX expression rather than `{ file = "LICENSE" }`: the file form makes the build hard
 # -fail with `OSError: License file does not exist` whenever the build context omits the
 # file, which is exactly what Railway's Nixpacks upload does. The license did not change;
@@ -30,6 +43,11 @@ server = ["fastapi", "uvicorn", "cryptography"]
 # an injected fake client. A bare `pip install -e ".[dev]"` that cannot collect the
 # suite makes the README's own test command fail, which is how this was found.
 dev = ["pytest", "openai", "pydantic"]
+
+[project.urls]
+Homepage = "https://github.com/jashansadioura32/dbt-sentinel"
+Documentation = "https://github.com/jashansadioura32/dbt-sentinel/tree/main/docs"
+Issues = "https://github.com/jashansadioura32/dbt-sentinel/issues"
 
 [project.scripts]
 dbt-sentinel = "dbt_sentinel.cli:main"
