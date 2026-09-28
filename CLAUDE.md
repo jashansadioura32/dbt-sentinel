@@ -21,8 +21,8 @@ product. Optimise for correctness that can be proven, not for feature count.
 - Auth, multi-tenancy, billing, or anything resembling SaaS scaffolding.
 - Agent frameworks that hide control flow. Plain orchestration only.
 
-If you think of something valuable that is out of scope, append it to `ROADMAP.md`
-and move on. Do not build it.
+If you think of something valuable that is out of scope, add it to "What's next" in
+the README (or open an issue) and move on. Do not build it.
 
 ## Architecture
 

@@ -11,7 +11,7 @@ env/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
-.coverageS
+.coverage
 htmlcov/
 brag-output*/
 
@@ -37,3 +37,6 @@ logs/
 *.p8
 .env.*
 !.env.example
+
+# Local review output from the VS Code hook (docs/LOCAL.md).
+.sentinel/
